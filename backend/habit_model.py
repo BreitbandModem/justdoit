@@ -20,10 +20,10 @@ class HabitModel:
         """Store list of dates to csv file."""
         with open(self.dates_filename, 'a+') as dates_file:
             for date in dates:
+                # if date (without time) doesn't exist in file, insert full date at end of file
                 dates_file.seek(0)  # seek to file start
-                read = dates_file.read()
-                if date["date"].split('T')[0] not in read:
-                    dates_file.seek(0,2)  # seek to file end
+                if date["date"].split('T')[0] not in dates_file.read():
+                    dates_file.seek(0, 2)  # seek to file end
                     dates_file.write(date["date"] + "\n")
 
     def delete_dates(self, dates):
