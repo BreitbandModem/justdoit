@@ -2,9 +2,10 @@
 
 from habit_model import HabitModel
 
+import logging
 import json
 from jsonschema import validate, ValidationError, SchemaError
-from flask import Flask, Response, request, jsonify
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 meditation_habit = None
@@ -28,15 +29,17 @@ date_list_schema = {
     "required": ["dates"]
 }
 
+
 @app.route('/habit/meditation', methods=['GET'])
 def get_dates():
     """Get interpolated list of dates from last x days."""
     schema = {
         "type": "object",
         "properties": {
-            "history": {"type": "number"}
+            "startDate": {"type": "string"},
+            "count": {"type": "number"}
         },
-        "required": ["history"]
+        "required": ["startDate", "count"]
 
     }
 
@@ -46,14 +49,16 @@ def get_dates():
             validate(history_json, schema)
         except SchemaError as e:
             app.logger.error('Schema definition invalid.')
-            return Response(jsonify({'history': []}), status=500, mimetype='application/json')
+            return jsonify({'history': []}), 500
         except ValidationError as e:
             app.logger.warning(e)
-            return Response(jsonify({'history': []}), status=400, mimetype='application/json')
+            return jsonify({'history': []}), 400
         else:
-            app.logger.info('Retreiving history for last %s days.', history_json['history'])
+            app.logger.info('Retreiving history for last %s days.', history_json['count'])
+            history = meditation_habit.get_history(history_json["startDate"], history_json["count"])
+            return jsonify(history), 200
 
-    return Response(jsonify({'history': []}), status=500, mimetype='application/json')
+    return jsonify({'history': []}), 500
 
 
 @app.route('/habit/meditation', methods=['POST'])
@@ -65,24 +70,23 @@ def add_dates():
             validate(dates, date_list_schema)
         except SchemaError as e:
             app.logger.error('Schema definition invalid.')
-            return Response(jsonify({'added': 0}), status=500, mimetype='application/json')
+            return jsonify({'added': 0}), 500
         except ValidationError as e:
             app.logger.warning(e)
-            return Response(jsonify({'added': 0}), status=400, mimetype='application/json')
+            jsonify({'added': 0}), 400
         else:
             app.logger.info('Adding list of dates: %s.', dates['dates'][0])
             try:
                 added = meditation_habit.add_dates(dates['dates'])
             except Exception:
-                return Response(jsonify({'added': 0}), status=500, mimetype='application/json')
+                return jsonify({'added': 0}), 500
             else:
                 if added > 0:
-                    status = 201
+                    return jsonify({'added': added}), 201
                 else:
-                    status = 200
-                return Response(jsonify({'added': added}), status=status, mimetype='application/json')
+                    return jsonify({'added': added}), 200
 
-    return Response(jsonify({'added': 0}), status=500, mimetype='application/json')
+    return jsonify({'added': 0}), 500
 
 
 
@@ -95,23 +99,24 @@ def delete_dates():
             validate(dates, date_list_schema)
         except SchemaError as e:
             app.logger.error('Schema definition invalid.')
-            return Response(jsonify({'deleted': 0}), status=500, mimetype='application/json')
+            return jsonify({'deleted': 0}), 500
         except ValidationError as e:
             app.logger.warning(e)
-            return Response(jsonify({'deleted': 0}), status=400, mimetype='application/json')
+            return jsonify({'deleted': 0}), 400
         else:
             app.logger.info('Deleting list of dates: %s.', dates['dates'][0])
             try:
                 deleted = meditation_habit.delete_dates(dates['dates'])
             except Exception:
-                return Response(jsonify({'deleted': 0}), status=500, mimetype='application/json')
+                return jsonify({'deleted': 0}), 500
             else:
-                return Response(jsonify({'deleted': deleted}), status=200, mimetype='application/json')
+                return jsonify({'deleted': deleted}), 200
 
-    return Response(jsonify({'deleted': 0}), status=500, mimetype='application/json')
+    return jsonify({'deleted': 0}), 500
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
     app.logger.info('Starting Webserver')
 
     meditation_habit = HabitModel(app.logger, '/data/meditation.csv')

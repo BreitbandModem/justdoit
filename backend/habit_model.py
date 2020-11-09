@@ -1,3 +1,11 @@
+from datetime import timedelta, datetime
+
+
+def daterange(start_date, count):
+    for days in range(count):
+        yield start_date - timedelta(days)
+
+
 class HabitModel:
     """A model class to store and retrieve habit data from csv."""
 
@@ -12,9 +20,25 @@ class HabitModel:
         except FileExistsError:
             self.logger.info('Dates file exists: %s', self.dates_filename)
 
-    def get_history(self, history):
+    def get_history(self, start_date, count):
         """Get interpolated list of dates from last x days."""
-        pass
+        history = {"history": []}
+
+        start_date = datetime.fromisoformat(start_date)
+
+        index = 0
+        for date in daterange(start_date, count):
+            self.logger.info('Date: %s', date.strftime("%Y-%m-%d"))
+
+            # TODO: find date in csv to set done value
+            done = 0
+
+            item = {"index": index, "date": date, "done": done}
+            history["history"].append(item)
+
+            index += 1
+
+        return history
 
     def add_dates(self, dates):
         """Store list of dates to csv file."""
