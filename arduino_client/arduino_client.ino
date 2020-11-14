@@ -28,31 +28,65 @@ Timezone myTimezone;
 // Pixel variables
 Adafruit_NeoPixel strip(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
+// Control flow variables
+int currentButtonState;       // the actual current button state after debouncing
+int lastButtonState = HIGH;   // the previous reading from the input pin
+unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
+unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
+
 void setup() {
   initLog();
   pinMode(LED_PIN, OUTPUT);  // init artuino LED
   pinMode(BUTTON_PIN, INPUT_PULLUP);  // init button
   pinMode(PIR_PIN, INPUT);  // init PIR motion sensor
   initPixels();
+
+  strip.setPixelColor(59, strip.Color(  127, 0,   0));
+  strip.show();
+  
   checkWifiModule();
   checkWifiFirmware();
   //connectWifi();
   //printWifiStatus();
   //ezTimeSetup();
+
+  strip.setPixelColor(59, strip.Color(  0, 127,   0));
+  strip.show();
 }
 
 void loop() {
   // ezTime event trigger
   events();
 
-  strip.setPixelColor(0, strip.Color(  0, 0,   255));
-  strip.setPixelColor(1, strip.Color(  255, 255,   0));
-  strip.setPixelColor(2, strip.Color(  255, 0,   255));
-  strip.setPixelColor(4, strip.Color(  0, 0,   255));
-  strip.setPixelColor(6, strip.Color(  0, 0,   255));
-  strip.setPixelColor(7, strip.Color(  0, 0,   255));
+  int readButton = digitalRead(BUTTON_PIN);
+  log("Button Pressed:");
+  log(readButton);
+  if (readButton != lastButtonState) {
+    // reset the debouncing timer
+    lastDebounceTime = millis();
+  }
+
+  // signal is present > debounce time
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+
+    // update current button state
+    if (readButton != currentButtonState) {
+      currentButtonState = readButton;
+
+      // Button has been pressed
+      if (currentButtonState == LOW) {
+        habitDone();
+      }
+    }
+  }
+
+  lastButtonState = readButton;
+}
+
+void habitDone() {
+//  TODO: implement
+  strip.setPixelColor(0, strip.Color(  0, 70,   127));
   strip.show();
-  rainbow(10);
 }
 
 void initLog() {
@@ -63,6 +97,7 @@ void initLog() {
     }*/
   }
 }
+
 void initPixels() {
   strip.begin(); // Initialize NeoPixel strip object (REQUIRED)
 
@@ -152,6 +187,7 @@ void rainbow(int wait) {
   }
 }
 
+
 void log(const char *logmessage) {
   log(logmessage, LOG_INFO);
 }
@@ -163,12 +199,10 @@ void log(const char *logmessage, byte severity) {
     switch(severity) {
       case LOG_INFO:
         Serial.print(" - INFO  - ");
-        strip.setPixelColor(59, strip.Color(  0, 127, 0));
         strip.show();
         break;
       case LOG_WARNING:
         Serial.print(" - WARN  - ");
-        strip.setPixelColor(59, strip.Color(  127, 127, 0));
         strip.show();
         break;
       case LOG_ERROR:
