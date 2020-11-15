@@ -46,13 +46,13 @@ unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
 unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
 
 
-struct pixelData {
+struct PixelData {
    char date[26];
    bool done;
    bool syncme;
 };
 
-struct pixelData pixelHistory[PIXEL_COUNT];
+struct PixelData pixelHistory[PIXEL_COUNT];
 
 void setup() {
   initLog();
@@ -69,11 +69,12 @@ void setup() {
   connectWifi();
   printWifiStatus();
   ezTimeSetup();
+  setEvent( everyTenSeconds, nextTenSeconds() );
 
   strip.setPixelColor(59, strip.Color(  0, 127,   0));
   strip.show();
   
-  getDoneHistory();
+  syncDown();
   visualizeDoneHistory();
 }
 
@@ -104,7 +105,79 @@ void loop() {
   lastButtonState = readButton;
 }
 
-bool getDoneHistory() {
+// Triggered every day by the ezTime events()
+void everyDay() {
+  Serial.println("Next Day. Shifting pixelHistory...");
+
+  shiftPixelHistory();
+  visualizeDoneHistory();
+
+  // register next event
+  setEvent( everyDay, nextDay() );
+}
+
+// Triggered every 15 Seconds by the ezTime events()
+void everyTenSeconds() {
+  Serial.println("10 Seconds passed. Syncing to backend...");
+
+  shiftPixelHistory();
+  visualizeDoneHistory();
+
+  // First, sync pending changes to backend. Only then download (overwrite) local status by remote.
+//  if( syncUp() ) {
+//    syncDown();
+//    visualizeDoneHistory();
+//  }
+
+  // register next event
+  setEvent( everyTenSeconds, nextTenSeconds() );
+}
+
+time_t nextTenSeconds() {
+  Serial.print("Calculating next 10 Seconds...");
+
+  tmElements_t tm;
+  breakTime(UTC.now(), tm);
+  
+  tm.Second = tm.Second + 10;
+  
+  return makeTime(tm);
+}
+
+time_t nextDay() {
+  Serial.print("Calculating next Day...");
+
+  tmElements_t tm;
+  breakTime(UTC.now(), tm);
+
+  // Run at 03:00 on the next day
+  tm.Day = tm.Day + 1;
+  tm.Hour = 3;
+  tm.Minute = 0;
+  tm.Second = 0;
+  
+  return makeTime(tm);
+}
+
+void shiftPixelHistory() {
+
+  // Shift all pixels to the 'right' (last pixel will be dropped)
+  for (int i=PIXEL_COUNT-1; i>0; i--) {
+    pixelHistory[i] = pixelHistory[i-1];
+  }
+
+  // Add new pixel for today (0)
+  PixelData todaysPixel;
+  
+  strncpy(todaysPixel.date, myTimezone.dateTime(MYISO8601).c_str(), sizeof todaysPixel.date);
+  todaysPixel.done = false;
+  todaysPixel.syncme = false;
+  
+  pixelHistory[0] = todaysPixel;
+
+}
+
+bool syncDown() {
 //  curl -X GET -H "Content-Type: application/json" \
 //    -d '{"startDate": "2020-11-15T10:14:43+01:00", "count": 60 }' \
 //    http://localhost:5555/habit/meditation 
@@ -144,7 +217,14 @@ bool getDoneHistory() {
 
 void visualizeDoneHistory() {
   for (int i=0; i<PIXEL_COUNT; i++) {
-    if (pixelHistory[i].done == 1){
+    Serial.print("Pixel #");
+    Serial.print(i);
+    Serial.print("  date: ");
+    Serial.println(pixelHistory[i].date);
+
+    if (pixelHistory[i].syncme == 1) {
+      setPixelPending(i);
+    } else if (pixelHistory[i].done == 1){
       setPixelDone(i);
     } else {
       setPixelUndone(i);
@@ -155,6 +235,8 @@ void visualizeDoneHistory() {
 
 // when button is pressed, update latest day in history and mark for sync
 void buttonPress() {
+  
+  strncpy(pixelHistory[0].date, myTimezone.dateTime(MYISO8601).c_str(), sizeof pixelHistory[0].date);
   pixelHistory[0].done = !pixelHistory[0].done;
   pixelHistory[0].syncme = true;
 
