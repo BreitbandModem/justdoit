@@ -27,14 +27,21 @@ class HabitModel:
 
         start_date = datetime.fromisoformat(start_date)
 
+        with open(self.dates_filename, 'r') as dates_file:
+            dates_file_read = dates_file.read()
+
         index = 0
         for date in daterange(start_date, count):
             self.logger.info('Date: %s', date.strftime("%Y-%m-%d"))
+            self.logger.info("Date iso! %s", date.isoformat())
 
-            # TODO: find date in csv to set done value
             done = 0
 
-            item = {"index": index, "date": date, "done": done}
+            if date.strftime("%Y-%m-%d") in dates_file_read:
+                self.logger.info("Done! %s", date)
+                done = 1
+
+            item = {"index": index, "date": date.isoformat(), "done": done}
             history["history"].append(item)
 
             index += 1
@@ -48,6 +55,7 @@ class HabitModel:
             for date in dates:
                 # validate time format: throws exception to api_controller
                 datetime.fromisoformat(date["date"])
+                self.logger.info("Adding date: %s", date)
 
                 # if date (without time) doesn't exist in file, insert full date at end of file
                 dates_file.seek(0)  # seek to file start
