@@ -14,6 +14,7 @@ class HabitModel:
         self.logger = logger
         self.dates_filename = dates_filename
 
+        # Create file if not exists
         try:
             with open(self.dates_filename, 'x') as new_dates_file:
                 self.logger.info('Created new dates file %s', self.dates_filename)
@@ -45,6 +46,9 @@ class HabitModel:
         add_count = 0
         with open(self.dates_filename, 'a+') as dates_file:
             for date in dates:
+                # validate time format: throws exception to api_controller
+                datetime.fromisoformat(date["date"])
+
                 # if date (without time) doesn't exist in file, insert full date at end of file
                 dates_file.seek(0)  # seek to file start
                 if date["date"].split('T')[0] not in dates_file.read():

@@ -66,6 +66,7 @@ def add_dates():
     """Submit a list of dates when the habit was done."""
     dates = json.loads(request.data)
     if dates is not None:
+        app.logger.info('request json: %s', dates)
         try:
             validate(dates, date_list_schema)
         except SchemaError as e:
@@ -78,7 +79,8 @@ def add_dates():
             app.logger.info('Adding list of dates: %s.', dates['dates'][0])
             try:
                 added = meditation_habit.add_dates(dates['dates'])
-            except Exception:
+            except Exception as e:
+                app.logger.warning(e)
                 return jsonify({'added': 0}), 500
             else:
                 if added > 0:
