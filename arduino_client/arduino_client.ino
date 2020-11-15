@@ -144,30 +144,12 @@ bool getDoneHistory() {
 
 void visualizeDoneHistory() {
   for (int i=0; i<PIXEL_COUNT; i++) {
-    Serial.print("Date: ");
-    Serial.print(pixelHistory[i].date);
-    Serial.print(" - Done: ");
-    Serial.println(pixelHistory[i].done);
-
-    // default: current day -> 0
-    int pixelIndex = 0;
-
-    // fill pixel ring backwards:
-    // 1 -> 59
-    // 2 -> 58
-    // 3 -> 57
-    if (i != 0) {
-      pixelIndex = PIXEL_COUNT - i;
-    }
-
     if (pixelHistory[i].done == 1){
-      strip.setPixelColor(pixelIndex, strip.Color(  0, 70,   127));
+      setPixelDone(i);
     } else {
-      strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));
+      setPixelUndone(i);
     }
-    
   }
-  
   strip.show();
 }
 
@@ -177,7 +159,7 @@ void buttonPress() {
   pixelHistory[0].syncme = true;
 
   // sync pending -> green
-  strip.setPixelColor(0, strip.Color(  127, 127,   0));
+  setPixelPending(0);
   strip.show();
 
   delay(1000);
@@ -245,18 +227,19 @@ void syncUp() {
     }
   }
 
-  // untag syncme flags
+  // untag syncme flags and set pixel color
   for (int i=0; i<PIXEL_COUNT; i++) {
     if( pixelHistory[i].syncme ) {
       if ( pixelHistory[i].done && postSuccess) {
         pixelHistory[i].syncme = false;
-        // TODO: update pixel color
+        setPixelDone(i);
       } else if ( !pixelHistory[i].done && deleteSuccess) {
         pixelHistory[i].syncme = false;
-        // TODO: update pixel color
+        setPixelUndone(i);
       }
     }
   }
+  strip.show();
   
 }
 
@@ -316,6 +299,37 @@ bool httpRequest(const char *method, char *body, DynamicJsonDocument * responseD
     return true;
     
   }
+}
+
+
+int translatePixelLocation(int arrayIndex) {
+  // fill pixel ring backwards except for current day, which is on first pixel (0).
+  // 0 ->  0
+  // 1 -> 59
+  // 2 -> 58
+  // 3 -> 57
+  
+  int pixelIndex = 0;
+  if (arrayIndex != 0) {
+    pixelIndex = PIXEL_COUNT - arrayIndex;
+  }
+
+  return pixelIndex;
+}
+
+void setPixelPending(int arrayIndex) {
+  int pixelIndex = translatePixelLocation(arrayIndex);
+  strip.setPixelColor(pixelIndex, strip.Color(  127, 127,   0));  // yellow
+}
+
+void setPixelDone(int arrayIndex) {
+  int pixelIndex = translatePixelLocation(arrayIndex);
+  strip.setPixelColor(pixelIndex, strip.Color(  0, 70,   127));  // blueish
+}
+
+void setPixelUndone(int arrayIndex) {
+  int pixelIndex = translatePixelLocation(arrayIndex);
+  strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
 }
 
 void initLog() {
