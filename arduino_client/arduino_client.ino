@@ -97,13 +97,6 @@ void loop() {
       // Button has been pressed
       if (currentButtonState == LOW) {
         buttonPress();
-        if(submitDate()) {
-          strip.setPixelColor(0, strip.Color(  0, 70,   127));
-          strip.show();
-        } else {
-          strip.setPixelColor(0, strip.Color(  127, 50,   50));
-          strip.show();
-        }
       }
     }
   }
@@ -136,7 +129,11 @@ bool getDoneHistory() {
       int done = dayInHistory["done"];
 
       strncpy(pixelHistory[i].date, date, strlen(date));
-      pixelHistory[i].done = done;
+      if (done == 1) {
+        pixelHistory[i].done = true;
+      } else {
+        pixelHistory[i].done = false;
+      }
       pixelHistory[i].syncme = false;
     }
     return true;
@@ -166,7 +163,7 @@ void visualizeDoneHistory() {
     if (pixelHistory[i].done == 1){
       strip.setPixelColor(pixelIndex, strip.Color(  0, 70,   127));
     } else {
-      strip.setPixelColor(pixelIndex, strip.Color(  127, 127,   0));
+      strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));
     }
     
   }
@@ -176,35 +173,91 @@ void visualizeDoneHistory() {
 
 // when button is pressed, update latest day in history and mark for sync
 void buttonPress() {
-  // TODO
+  pixelHistory[0].done = !pixelHistory[0].done;
+  pixelHistory[0].syncme = true;
+
+  // sync pending -> green
+  strip.setPixelColor(0, strip.Color(  127, 127,   0));
+  strip.show();
+
+  delay(1000);
+  syncUp();
 }
 
-// return true if date has been added successfully to backend
-bool submitDate() {
-  // allocate json object
-  const size_t requestCapacity = JSON_ARRAY_SIZE(1) + 2*JSON_OBJECT_SIZE(1);
-  DynamicJsonDocument requestDoc(requestCapacity);
+// submit pending updates to backend
+void syncUp() {
+  // allocate json object 
+  const size_t postRequestCapacity = JSON_ARRAY_SIZE(PIXEL_COUNT) + (PIXEL_COUNT+1)*JSON_OBJECT_SIZE(1);
+  DynamicJsonDocument postRequestDoc(postRequestCapacity);
 
-  // populate json with current date
-  JsonArray dates = requestDoc.createNestedArray("dates");
-  JsonObject dates_0 = dates.createNestedObject();
-  dates_0["date"] = myTimezone.dateTime(MYISO8601).c_str();
+  const size_t deleteRequestCapacity = JSON_ARRAY_SIZE(PIXEL_COUNT) + (PIXEL_COUNT+1)*JSON_OBJECT_SIZE(1);
+  DynamicJsonDocument deleteRequestDoc(deleteRequestCapacity);
 
-  char body[256];
-  serializeJson(requestDoc, body);
+  JsonArray postDates = postRequestDoc.createNestedArray("dates");
+  JsonArray deleteDates = deleteRequestDoc.createNestedArray("dates");
 
-  // Allocate the JSON response document
+  // populate json with syncme data
+  bool postRequired = false;
+  bool deleteRequired = false;
+  for (int i=0; i<PIXEL_COUNT; i++) {
+    if( pixelHistory[i].syncme ) {
+      if ( pixelHistory[i].done ) {
+        
+        // Add date to backend
+        JsonObject date = postDates.createNestedObject();
+        date["date"] = pixelHistory[i].date;
+        postRequired = true;
+        
+      } else {
+        
+        // Delete date from backend
+        JsonObject date = deleteDates.createNestedObject();
+        date["date"] = pixelHistory[i].date;
+        deleteRequired = true;
+        
+      }
+    }
+  }
+
+  // Allocate the body and JSON response document
+  char body[3000];
   const size_t responseRequest = JSON_OBJECT_SIZE(1) + 10;
   DynamicJsonDocument responseDoc(responseRequest);
 
-  if (httpRequest("POST", body, &responseDoc)) {
-    if (responseDoc["added"] == 1 ) {
-      Serial.print("Server successfully added date to backend.");
-      return true;
+  bool postSuccess = false;
+  bool deleteSuccess = false;
+
+  // Send post request to add dates to backend
+  if ( postRequired ) {
+    serializeJson(postRequestDoc, body);
+    if (httpRequest("POST", body, &responseDoc)) {
+      Serial.print("Server successfully added dates to backend.");
+      postSuccess = true;
+    }
+  }
+
+  // Send delete request to delete dates from backend
+  if ( deleteRequired ) {
+    serializeJson(deleteRequestDoc, body);
+    if (httpRequest("DELETE", body, &responseDoc)) {
+      Serial.print("Server successfully deleted dates from backend.");
+      deleteSuccess = true;
+    }
+  }
+
+  // untag syncme flags
+  for (int i=0; i<PIXEL_COUNT; i++) {
+    if( pixelHistory[i].syncme ) {
+      if ( pixelHistory[i].done && postSuccess) {
+        pixelHistory[i].syncme = false;
+        // TODO: update pixel color
+      } else if ( !pixelHistory[i].done && deleteSuccess) {
+        pixelHistory[i].syncme = false;
+        // TODO: update pixel color
+      }
     }
   }
   
-  return false;
 }
 
 bool httpRequest(const char *method, char *body, DynamicJsonDocument * responseDoc) {
