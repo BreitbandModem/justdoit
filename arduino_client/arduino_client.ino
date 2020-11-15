@@ -102,33 +102,58 @@ void habitDone() {
   }
 }
 
+void getDoneHistory() {
+//  curl -X GET -H "Content-Type: application/json" \
+//    -d '{"startDate": "2020-11-15T10:14:43+01:00", "count": 60 }' \
+//    http://localhost:5555/habit/meditation
+
+  
+}
+
 // return true if date has been added successfully to backend
 bool submitDate() {
   // allocate json object
-  const size_t capacity = JSON_ARRAY_SIZE(1) + 2*JSON_OBJECT_SIZE(1);
-  DynamicJsonDocument requestDoc(capacity);
+  const size_t requestCapacity = JSON_ARRAY_SIZE(1) + 2*JSON_OBJECT_SIZE(1);
+  DynamicJsonDocument requestDoc(requestCapacity);
 
   // populate json with current date
   JsonArray dates = requestDoc.createNestedArray("dates");
   JsonObject dates_0 = dates.createNestedObject();
   dates_0["date"] = myTimezone.dateTime(MYISO8601).c_str();
 
-  // serialize json to body var
   const int bodyLength = measureJson(requestDoc);
   char body[256];
   serializeJson(requestDoc, body);
-
-  log("body length:");
-  Serial.println(bodyLength);
-  log("body content:");
   Serial.println(body);
+
+  // Allocate the JSON response document
+  const size_t responseRequest = JSON_OBJECT_SIZE(1) + 10;
+  DynamicJsonDocument responseDoc(responseRequest);
+
+  if (httpRequest("POST", body, &responseDoc)) {
+    if (responseDoc["added"] == 1 ) {
+      Serial.print("Server successfully added date to backend.");
+      return true;
+    }
+  }
   
+  return false;
+}
+
+bool httpRequest(const char *method, char *body, DynamicJsonDocument * responseDoc) {
   // if there's a successful connection:
   if (client.connect(backendAddress, backendPort)) 
   {
     log("connecting to backend ... ");
-    
-    client.println("POST /habit/meditation HTTP/1.1"); 
+  
+    log("body length:");
+    size_t bodyLength = strlen(body);
+    Serial.println(bodyLength);
+    log("body content:");
+    Serial.println(body);
+
+    client.print(method);
+    client.println(" /habit/meditation HTTP/1.1"); 
     client.print("Host: ");
     client.println(backendAddress);
     client.println("Content-type: application/json");
@@ -160,27 +185,15 @@ bool submitDate() {
       Serial.println(F("Invalid response"));
       return false;
     }
-
-    // Allocate the JSON response document
-    const size_t capacity = JSON_OBJECT_SIZE(1) + 10;
-    DynamicJsonDocument responseDoc(capacity);
     
-    DeserializationError error = deserializeJson(responseDoc, client);
+    DeserializationError error = deserializeJson(*responseDoc, client);
     if (error) {
       Serial.print(F("deserializeJson() failed: "));
       Serial.println(error.c_str());
       return false;
     }
 
-    int added = responseDoc["added"];
-    Serial.print("Server successfully added dates:");
-    Serial.println(added);
-
-    if (added == 1) {
-      return true;
-    } else {
-      return false;
-    }
+    return true;
     
   }
 }
