@@ -20,7 +20,7 @@ const byte PIR_PIN     = 3;
 const byte PIXEL_PIN   = 6;
 const byte LED_PIN     = 13;  // Arduino built-in LED
 const int  PIXEL_COUNT = 60;  // Number of NeoPixels
-const int  BRIGHTNESS  = 25;
+const int  BRIGHTNESS  = 10;
 
 const IPAddress backendAddress(192,168,0,248);
 const int backendPort = 5555;
@@ -69,7 +69,8 @@ void setup() {
   connectWifi();
   printWifiStatus();
   ezTimeSetup();
-  setEvent( everyTenSeconds, nextFiveMinutes() );
+  setEvent( everyFiveMinutes, nextFiveMinutes() );
+  setEvent( everyDay, nextDay() );
 
   strip.setPixelColor(59, strip.Color(  0, 127,   0));
   strip.show();
@@ -117,7 +118,7 @@ void everyDay() {
 }
 
 // Triggered every 5 Minutes by the ezTime events()
-void everyTenSeconds() {
+void everyFiveMinutes() {
   Serial.println("10 Seconds passed. Syncing to backend...");
 
   // First, sync pending changes to backend. Only then download (overwrite) local status by remote.
@@ -127,7 +128,7 @@ void everyTenSeconds() {
     }
 
   // register next event
-  setEvent( everyTenSeconds, nextFiveMinutes() );
+  setEvent( everyFiveMinutes, nextFiveMinutes() );
 }
 
 // Calculate timestamp five minutes from now
@@ -136,7 +137,9 @@ time_t nextFiveMinutes() {
 
   tmElements_t tm;
   breakTime(UTC.now(), tm);
-  
+
+  // Debug: Change interval to every 10 seconds
+  // tm.Second = tm.Second + 10;
   tm.Minute = tm.Minute + 5;
   
   return makeTime(tm);
@@ -177,6 +180,7 @@ void shiftPixelHistory() {
 }
 
 bool syncDown() {
+  Serial.println("Getting latest history from server ...");
 //  curl -X GET -H "Content-Type: application/json" \
 //    -d '{"startDate": "2020-11-15T10:14:43+01:00", "count": 60 }' \
 //    http://localhost:5555/habit/meditation 
@@ -194,6 +198,7 @@ bool syncDown() {
 
   if (httpRequest("GET", body, &responseDoc)) {
     // Write history from json to native pixelHistory array
+    Serial.println("Received History from backend. Updating local copy...");
     JsonArray history = responseDoc["history"];
     for (int i=0; i<PIXEL_COUNT; i++) {
       JsonObject dayInHistory = history[i];
@@ -216,14 +221,16 @@ bool syncDown() {
 
 void visualizeDoneHistory() {
   for (int i=0; i<PIXEL_COUNT; i++) {
-//    Serial.print("Pixel #");
-//    Serial.print(i);
-//    Serial.print("  date: ");
-//    Serial.println(pixelHistory[i].date);
+    Serial.print("Pixel #");
+    Serial.print(i);
+    Serial.print("  date: ");
+    Serial.print(pixelHistory[i].date);
+    Serial.print(" done: ");
+    Serial.println(pixelHistory[i].done);
 
-    if (pixelHistory[i].syncme == 1) {
+    if ( pixelHistory[i].syncme ) {
       setPixelPending(i);
-    } else if (pixelHistory[i].done == 1){
+    } else if ( pixelHistory[i].done ){
       setPixelDone(i);
     } else {
       setPixelUndone(i);
@@ -392,9 +399,12 @@ bool httpRequest(const char *method, char *body, DynamicJsonDocument * responseD
       return false;
     }
 
+    // no errors so far, we got a json response. Return successfull.
     return true;
-    
   }
+
+  // couldn't connect to server.
+  return false;
 }
 
 
