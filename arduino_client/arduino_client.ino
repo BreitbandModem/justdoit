@@ -44,7 +44,15 @@ int currentButtonState;       // the actual current button state after debouncin
 int lastButtonState = HIGH;   // the previous reading from the input pin
 unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
 unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
-JsonArray history;
+
+
+struct pixelData {
+   char date[26];
+   bool done;
+   bool syncme;
+};
+
+struct pixelData pixelHistory[PIXEL_COUNT];
 
 void setup() {
   initLog();
@@ -87,7 +95,8 @@ void loop() {
       currentButtonState = readButton;
 
       // Button has been pressed
-      if (currentButtonState == LOW) {        
+      if (currentButtonState == LOW) {
+        buttonPress();
         if(submitDate()) {
           strip.setPixelColor(0, strip.Color(  0, 70,   127));
           strip.show();
@@ -119,7 +128,17 @@ bool getDoneHistory() {
   DynamicJsonDocument responseDoc(responseCapacity);
 
   if (httpRequest("GET", body, &responseDoc)) {
-    history = responseDoc["history"];
+    // Write history from json to native pixelHistory array
+    JsonArray history = responseDoc["history"];
+    for (int i=0; i<PIXEL_COUNT; i++) {
+      JsonObject dayInHistory = history[i];
+      const char* date = dayInHistory["date"];
+      int done = dayInHistory["done"];
+
+      strncpy(pixelHistory[i].date, date, strlen(date));
+      pixelHistory[i].done = done;
+      pixelHistory[i].syncme = false;
+    }
     return true;
   }
   
@@ -128,15 +147,10 @@ bool getDoneHistory() {
 
 void visualizeDoneHistory() {
   for (int i=0; i<PIXEL_COUNT; i++) {
-    JsonObject dayInHistory = history[i];
-    int index = dayInHistory["index"];
-    const char* date = dayInHistory["date"];
-    int done = dayInHistory["done"];
-
     Serial.print("Date: ");
-    Serial.print(date);
+    Serial.print(pixelHistory[i].date);
     Serial.print(" - Done: ");
-    Serial.println(done);
+    Serial.println(pixelHistory[i].done);
 
     // default: current day -> 0
     int pixelIndex = 0;
@@ -149,9 +163,7 @@ void visualizeDoneHistory() {
       pixelIndex = PIXEL_COUNT - i;
     }
 
-    if (done == 0){
-      strip.setPixelColor(pixelIndex, strip.Color(  127, 0,   0));
-    } else if (done == 1) {
+    if (pixelHistory[i].done == 1){
       strip.setPixelColor(pixelIndex, strip.Color(  0, 70,   127));
     } else {
       strip.setPixelColor(pixelIndex, strip.Color(  127, 127,   0));
@@ -160,6 +172,11 @@ void visualizeDoneHistory() {
   }
   
   strip.show();
+}
+
+// when button is pressed, update latest day in history and mark for sync
+void buttonPress() {
+  // TODO
 }
 
 // return true if date has been added successfully to backend
