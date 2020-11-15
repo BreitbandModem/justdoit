@@ -1,5 +1,6 @@
 #include <SPI.h>
 #include <WiFiNINA.h>
+#include <ArduinoJson.h>
 #include <ezTime.h>
 #include <Adafruit_NeoPixel.h>
 
@@ -11,11 +12,15 @@ const bool LOG_DEBUG   = true;
 const byte LOG_INFO    = 0;
 const byte LOG_WARNING = 1;
 const byte LOG_ERROR   = 2;
+
 const byte BUTTON_PIN  = 2;
 const byte PIR_PIN     = 3;
 const byte PIXEL_PIN   = 6;
 const byte LED_PIN     = 13;  // Arduino built-in LED
 const int  PIXEL_COUNT = 60;  // Number of NeoPixels
+
+const IPAddress backendAddress(192,168,0,248);
+const int backendPort = 5555;
 
 // Wifi variables
 char ssid[] = SECRET_SSID;
@@ -27,6 +32,9 @@ Timezone myTimezone;
 
 // Pixel variables
 Adafruit_NeoPixel strip(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
+
+// Initialize the Wifi client library
+WiFiClient client;
 
 // Control flow variables
 int currentButtonState;       // the actual current button state after debouncing
@@ -46,9 +54,10 @@ void setup() {
   
   checkWifiModule();
   checkWifiFirmware();
-  //connectWifi();
-  //printWifiStatus();
-  //ezTimeSetup();
+  connectWifi();
+  printWifiStatus();
+  ezTimeSetup();
+  // TODO: get habit history
 
   strip.setPixelColor(59, strip.Color(  0, 127,   0));
   strip.show();
@@ -59,8 +68,6 @@ void loop() {
   events();
 
   int readButton = digitalRead(BUTTON_PIN);
-  log("Button Pressed:");
-  log(readButton);
   if (readButton != lastButtonState) {
     // reset the debouncing timer
     lastDebounceTime = millis();
@@ -87,6 +94,44 @@ void habitDone() {
 //  TODO: implement
   strip.setPixelColor(0, strip.Color(  0, 70,   127));
   strip.show();
+  httpRequest();
+}
+
+void httpRequest() {
+  const size_t capacity = JSON_ARRAY_SIZE(1) + 2*JSON_OBJECT_SIZE(1);
+  DynamicJsonDocument doc(capacity);
+  
+  JsonArray dates = doc.createNestedArray("dates");
+  JsonObject dates_0 = dates.createNestedObject();
+  dates_0["date"] = myTimezone.dateTime(ISO8601).c_str();
+
+  const int bodyLength = measureJson(doc);
+  char body[256];
+  serializeJson(doc, body);
+
+  log("body length:");
+  Serial.println(bodyLength);
+  log("body content:");
+  Serial.println(body);
+  
+  // if there's a successful connection:
+  if (client.connect(backendAddress, backendPort)) 
+  {
+    log("connecting to backend ... ");
+    
+    client.println("POST /habit/meditation HTTP/1.1"); 
+    client.print("Host: ");
+    client.println(backendAddress);
+    client.println("Content-type: application/json");
+    client.println("Accept: */*");
+    client.println("Cache-Control: no-cache");
+    client.println("Accept-Encoding: gzip, deflate");
+    client.print("Content-Length: ");
+    client.println(bodyLength);
+    client.println("Connection: close");
+    client.println();
+    client.println(body);
+  }
 }
 
 void initLog() {
@@ -199,11 +244,9 @@ void log(const char *logmessage, byte severity) {
     switch(severity) {
       case LOG_INFO:
         Serial.print(" - INFO  - ");
-        strip.show();
         break;
       case LOG_WARNING:
         Serial.print(" - WARN  - ");
-        strip.show();
         break;
       case LOG_ERROR:
         Serial.print(" - ERROR - ");
