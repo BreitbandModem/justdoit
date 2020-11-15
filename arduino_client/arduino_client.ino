@@ -43,6 +43,7 @@ int currentButtonState;       // the actual current button state after debouncin
 int lastButtonState = HIGH;   // the previous reading from the input pin
 unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
 unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
+JsonArray history;
 
 void setup() {
   initLog();
@@ -59,7 +60,7 @@ void setup() {
   connectWifi();
   printWifiStatus();
   ezTimeSetup();
-  // TODO: get habit history
+  getDoneHistory();
 
   strip.setPixelColor(59, strip.Color(  0, 127,   0));
   strip.show();
@@ -102,12 +103,38 @@ void habitDone() {
   }
 }
 
-void getDoneHistory() {
+bool getDoneHistory() {
 //  curl -X GET -H "Content-Type: application/json" \
 //    -d '{"startDate": "2020-11-15T10:14:43+01:00", "count": 60 }' \
-//    http://localhost:5555/habit/meditation
-
+//    http://localhost:5555/habit/meditation 
+  const size_t requestCapacity = JSON_OBJECT_SIZE(2);
+  DynamicJsonDocument requestDoc(requestCapacity);
   
+  requestDoc["startDate"] = myTimezone.dateTime(MYISO8601).c_str();
+  requestDoc["count"] = 60;
+
+  char body[256];
+  serializeJson(requestDoc, body);
+
+  const size_t responseCapacity = JSON_ARRAY_SIZE(60) + JSON_OBJECT_SIZE(1) + 60*JSON_OBJECT_SIZE(3) + 1760;
+  DynamicJsonDocument responseDoc(responseCapacity);
+
+  if (httpRequest("GET", body, &responseDoc)) {
+    history = responseDoc["history"];
+    
+    JsonObject history_0 = history[0];
+    const char* history_0_date = history_0["date"]; // "2020-11-15T10:14:43+01:00"
+    int history_0_done = history_0["done"]; // 1
+    int history_0_index = history_0["index"]; // 0
+    
+    Serial.println("Item was done: ");
+    Serial.print(history_0_index);
+    Serial.print(history_0_date);
+    Serial.print(history_0_done);
+    return true;
+  }
+  
+  return false;
 }
 
 // return true if date has been added successfully to backend
@@ -121,10 +148,8 @@ bool submitDate() {
   JsonObject dates_0 = dates.createNestedObject();
   dates_0["date"] = myTimezone.dateTime(MYISO8601).c_str();
 
-  const int bodyLength = measureJson(requestDoc);
   char body[256];
   serializeJson(requestDoc, body);
-  Serial.println(body);
 
   // Allocate the JSON response document
   const size_t responseRequest = JSON_OBJECT_SIZE(1) + 10;
