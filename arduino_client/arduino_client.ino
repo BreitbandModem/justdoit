@@ -20,6 +20,7 @@ const byte PIR_PIN     = 3;
 const byte PIXEL_PIN   = 6;
 const byte LED_PIN     = 13;  // Arduino built-in LED
 const int  PIXEL_COUNT = 60;  // Number of NeoPixels
+const int  BRIGHTNESS  = 25;
 
 const IPAddress backendAddress(192,168,0,248);
 const int backendPort = 5555;
@@ -60,10 +61,12 @@ void setup() {
   connectWifi();
   printWifiStatus();
   ezTimeSetup();
-  getDoneHistory();
 
   strip.setPixelColor(59, strip.Color(  0, 127,   0));
   strip.show();
+  
+  getDoneHistory();
+  visualizeDoneHistory();
 }
 
 void loop() {
@@ -84,23 +87,19 @@ void loop() {
       currentButtonState = readButton;
 
       // Button has been pressed
-      if (currentButtonState == LOW) {
-        habitDone();
+      if (currentButtonState == LOW) {        
+        if(submitDate()) {
+          strip.setPixelColor(0, strip.Color(  0, 70,   127));
+          strip.show();
+        } else {
+          strip.setPixelColor(0, strip.Color(  127, 50,   50));
+          strip.show();
+        }
       }
     }
   }
 
   lastButtonState = readButton;
-}
-
-void habitDone() {
-  if(submitDate()) {
-    strip.setPixelColor(0, strip.Color(  0, 70,   127));
-    strip.show();
-  } else {
-    strip.setPixelColor(0, strip.Color(  127, 50,   50));
-    strip.show();
-  }
 }
 
 bool getDoneHistory() {
@@ -111,30 +110,56 @@ bool getDoneHistory() {
   DynamicJsonDocument requestDoc(requestCapacity);
   
   requestDoc["startDate"] = myTimezone.dateTime(MYISO8601).c_str();
-  requestDoc["count"] = 60;
+  requestDoc["count"] = PIXEL_COUNT;
 
   char body[256];
   serializeJson(requestDoc, body);
 
-  const size_t responseCapacity = JSON_ARRAY_SIZE(60) + JSON_OBJECT_SIZE(1) + 60*JSON_OBJECT_SIZE(3) + 1760;
+  const size_t responseCapacity = JSON_ARRAY_SIZE(PIXEL_COUNT) + JSON_OBJECT_SIZE(1) + PIXEL_COUNT*JSON_OBJECT_SIZE(3) + PIXEL_COUNT * 30;
   DynamicJsonDocument responseDoc(responseCapacity);
 
   if (httpRequest("GET", body, &responseDoc)) {
     history = responseDoc["history"];
-    
-    JsonObject history_0 = history[0];
-    const char* history_0_date = history_0["date"]; // "2020-11-15T10:14:43+01:00"
-    int history_0_done = history_0["done"]; // 1
-    int history_0_index = history_0["index"]; // 0
-    
-    Serial.println("Item was done: ");
-    Serial.print(history_0_index);
-    Serial.print(history_0_date);
-    Serial.print(history_0_done);
     return true;
   }
   
   return false;
+}
+
+void visualizeDoneHistory() {
+  for (int i=0; i<PIXEL_COUNT; i++) {
+    JsonObject dayInHistory = history[i];
+    int index = dayInHistory["index"];
+    const char* date = dayInHistory["date"];
+    int done = dayInHistory["done"];
+
+    Serial.print("Date: ");
+    Serial.print(date);
+    Serial.print(" - Done: ");
+    Serial.println(done);
+
+    // default: current day -> 0
+    int pixelIndex = 0;
+
+    // fill pixel ring backwards:
+    // 1 -> 59
+    // 2 -> 58
+    // 3 -> 57
+    if (i != 0) {
+      pixelIndex = PIXEL_COUNT - i;
+    }
+
+    if (done == 0){
+      strip.setPixelColor(pixelIndex, strip.Color(  127, 0,   0));
+    } else if (done == 1) {
+      strip.setPixelColor(pixelIndex, strip.Color(  0, 70,   127));
+    } else {
+      strip.setPixelColor(pixelIndex, strip.Color(  127, 127,   0));
+    }
+    
+  }
+  
+  strip.show();
 }
 
 // return true if date has been added successfully to backend
@@ -236,7 +261,7 @@ void initPixels() {
   strip.begin(); // Initialize NeoPixel strip object (REQUIRED)
 
   // strip.setPixelColor(0, strip.Color(  127, 0,   0));  //  Set pixel's color (in RAM)
-  strip.setBrightness(10); // Set BRIGHTNESS (max = 255)
+  strip.setBrightness(BRIGHTNESS); // Set BRIGHTNESS (max = 255)
 
   strip.show();  // Initialize all pixels to [0]-red
 }
