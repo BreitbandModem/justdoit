@@ -13,6 +13,8 @@ const byte LOG_INFO    = 0;
 const byte LOG_WARNING = 1;
 const byte LOG_ERROR   = 2;
 
+const char MYISO8601[] = "Y-m-d~TH:i:sP";  // 2020-11-15T07:42:02+01:00
+
 const byte BUTTON_PIN  = 2;
 const byte PIR_PIN     = 3;
 const byte PIXEL_PIN   = 6;
@@ -91,23 +93,30 @@ void loop() {
 }
 
 void habitDone() {
-//  TODO: implement
-  strip.setPixelColor(0, strip.Color(  0, 70,   127));
-  strip.show();
-  httpRequest();
+  if(submitDate()) {
+    strip.setPixelColor(0, strip.Color(  0, 70,   127));
+    strip.show();
+  } else {
+    strip.setPixelColor(0, strip.Color(  127, 50,   50));
+    strip.show();
+  }
 }
 
-void httpRequest() {
+// return true if date has been added successfully to backend
+bool submitDate() {
+  // allocate json object
   const size_t capacity = JSON_ARRAY_SIZE(1) + 2*JSON_OBJECT_SIZE(1);
-  DynamicJsonDocument doc(capacity);
-  
-  JsonArray dates = doc.createNestedArray("dates");
-  JsonObject dates_0 = dates.createNestedObject();
-  dates_0["date"] = myTimezone.dateTime(ISO8601).c_str();
+  DynamicJsonDocument requestDoc(capacity);
 
-  const int bodyLength = measureJson(doc);
+  // populate json with current date
+  JsonArray dates = requestDoc.createNestedArray("dates");
+  JsonObject dates_0 = dates.createNestedObject();
+  dates_0["date"] = myTimezone.dateTime(MYISO8601).c_str();
+
+  // serialize json to body var
+  const int bodyLength = measureJson(requestDoc);
   char body[256];
-  serializeJson(doc, body);
+  serializeJson(requestDoc, body);
 
   log("body length:");
   Serial.println(bodyLength);
@@ -131,6 +140,48 @@ void httpRequest() {
     client.println("Connection: close");
     client.println();
     client.println(body);
+
+    // Check HTTP status
+    char status[32] = {0};
+    client.readBytesUntil('\r', status, sizeof(status));
+    Serial.println(status);
+    // It should be "HTTP/1.0 200 OK" or "HTTP/1.1 200 CREATED"
+    if ( strcmp(status + 9, "200 OK") != 0 && strcmp(status + 9, "201 CREATED") != 0 ) 
+    {
+      Serial.print(F("Unexpected response: "));
+      Serial.println(status);
+      return false;
+    }
+
+    // Skip HTTP headers
+    char endOfHeaders[] = "\r\n\r\n";
+    if (!client.find(endOfHeaders)) 
+    {
+      Serial.println(F("Invalid response"));
+      return false;
+    }
+
+    // Allocate the JSON response document
+    const size_t capacity = JSON_OBJECT_SIZE(1) + 10;
+    DynamicJsonDocument responseDoc(capacity);
+    
+    DeserializationError error = deserializeJson(responseDoc, client);
+    if (error) {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.c_str());
+      return false;
+    }
+
+    int added = responseDoc["added"];
+    Serial.print("Server successfully added dates:");
+    Serial.println(added);
+
+    if (added == 1) {
+      return true;
+    } else {
+      return false;
+    }
+    
   }
 }
 
