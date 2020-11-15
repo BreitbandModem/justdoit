@@ -69,7 +69,7 @@ void setup() {
   connectWifi();
   printWifiStatus();
   ezTimeSetup();
-  setEvent( everyTenSeconds, nextTenSeconds() );
+  setEvent( everyTenSeconds, nextFiveMinutes() );
 
   strip.setPixelColor(59, strip.Color(  0, 127,   0));
   strip.show();
@@ -116,34 +116,33 @@ void everyDay() {
   setEvent( everyDay, nextDay() );
 }
 
-// Triggered every 15 Seconds by the ezTime events()
+// Triggered every 5 Minutes by the ezTime events()
 void everyTenSeconds() {
   Serial.println("10 Seconds passed. Syncing to backend...");
 
-  shiftPixelHistory();
-  visualizeDoneHistory();
-
   // First, sync pending changes to backend. Only then download (overwrite) local status by remote.
-//  if( syncUp() ) {
-//    syncDown();
-//    visualizeDoneHistory();
-//  }
+    if( syncUp() ) {
+      syncDown();
+      visualizeDoneHistory();
+    }
 
   // register next event
-  setEvent( everyTenSeconds, nextTenSeconds() );
+  setEvent( everyTenSeconds, nextFiveMinutes() );
 }
 
-time_t nextTenSeconds() {
-  Serial.print("Calculating next 10 Seconds...");
+// Calculate timestamp five minutes from now
+time_t nextFiveMinutes() {
+  Serial.println("Calculating next 5 Minutes...");
 
   tmElements_t tm;
   breakTime(UTC.now(), tm);
   
-  tm.Second = tm.Second + 10;
+  tm.Minute = tm.Minute + 5;
   
   return makeTime(tm);
 }
 
+// Calculate timestamp for next day 3:00 am
 time_t nextDay() {
   Serial.print("Calculating next Day...");
 
@@ -217,10 +216,10 @@ bool syncDown() {
 
 void visualizeDoneHistory() {
   for (int i=0; i<PIXEL_COUNT; i++) {
-    Serial.print("Pixel #");
-    Serial.print(i);
-    Serial.print("  date: ");
-    Serial.println(pixelHistory[i].date);
+//    Serial.print("Pixel #");
+//    Serial.print(i);
+//    Serial.print("  date: ");
+//    Serial.println(pixelHistory[i].date);
 
     if (pixelHistory[i].syncme == 1) {
       setPixelPending(i);
