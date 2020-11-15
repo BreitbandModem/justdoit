@@ -17,9 +17,12 @@ Retrieving the date history from the server will yield something like this:
 
 ```bash
 cd backend
+docker kill habit-tracker
+docker rm habit-tracker
 docker build -t habit-tracker:latest -f Dockerfile .
 docker run -d \
-    -p 80:5000 \
+    -p 5555:5000 \
+    -v $PWD:/data \
     --name habit-tracker \
     habit-tracker:latest
 ```
@@ -27,7 +30,13 @@ docker run -d \
 ## Test Backend
 
 ```bash
+curl -X GET -H "Content-Type: application/json" \
+    -d '{"startDate": "2020-11-15T10:14:43+01:00", "count": 60 }' \
+    http://localhost:5555/habit/meditation
+```
+
+```bash
 curl -X POST -H "Content-Type: application/json" \
-    -d '{"date": "22-11-2020"}' \
-    http://localhost/habit/meditation
+    -d '{"dates": [{"date": "25.12.2020T14:23:45+00:00"}] }' \
+    http://localhost:5555/habit/meditation
 ```
