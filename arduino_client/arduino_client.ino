@@ -167,7 +167,7 @@ void buttonPress() {
 }
 
 // submit pending updates to backend
-void syncUp() {
+bool syncUp() {  
   // allocate json object 
   const size_t postRequestCapacity = JSON_ARRAY_SIZE(PIXEL_COUNT) + (PIXEL_COUNT+1)*JSON_OBJECT_SIZE(1);
   DynamicJsonDocument postRequestDoc(postRequestCapacity);
@@ -213,18 +213,26 @@ void syncUp() {
   if ( postRequired ) {
     serializeJson(postRequestDoc, body);
     if (httpRequest("POST", body, &responseDoc)) {
-      Serial.print("Server successfully added dates to backend.");
-      postSuccess = true;
+      if (responseDoc["added"] >= 0 ) {
+        Serial.print("Server successfully added dates to backend.");
+        postSuccess = true;
+      }
     }
+  } else {
+    postSuccess = true;
   }
 
   // Send delete request to delete dates from backend
   if ( deleteRequired ) {
     serializeJson(deleteRequestDoc, body);
     if (httpRequest("DELETE", body, &responseDoc)) {
-      Serial.print("Server successfully deleted dates from backend.");
-      deleteSuccess = true;
+      if (responseDoc["deleted"] >= 0 ) {
+        Serial.print("Server successfully deleted dates from backend.");
+        deleteSuccess = true;
+      }
     }
+  } else {
+    deleteSuccess = true;
   }
 
   // untag syncme flags and set pixel color
@@ -240,6 +248,13 @@ void syncUp() {
     }
   }
   strip.show();
+
+  // only return true if everything has been completely synced up to the backend
+  if ( postSuccess && deleteSuccess ) {
+    return true;
+  }
+
+  return false;
   
 }
 
