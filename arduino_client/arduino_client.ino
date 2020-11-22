@@ -44,6 +44,8 @@ int currentButtonState;       // the actual current button state after debouncin
 int lastButtonState = HIGH;   // the previous reading from the input pin
 unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
 unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
+unsigned long lastWifiConnectTime = 0;  // the last time we tried to connect to wifi
+unsigned long wifiConnectDelay = 10000;  // wait this long before trying to reconnect to wifi
 
 
 struct PixelData {
@@ -68,8 +70,11 @@ void setup() {
   checkWifiFirmware();
   connectWifi();
   printWifiStatus();
-  ezTimeSetup();
-  setEvent( everyFiveMinutes, nextFiveMinutes() );
+
+  // ezTime setup
+  setDebug(INFO);
+  waitForTimeSync();
+  setEvent( fullSync, nextFiveMinutes() );
   setEvent( everyDay, nextDay() );
 
   strip.setPixelColor(59, strip.Color(  0, 127,   0));
@@ -80,6 +85,12 @@ void setup() {
 }
 
 void loop() {
+  // if not connected wifi, try to reconnect
+  connectWifi();
+
+  // while no time is available, this method will try to reconnect to NTP
+  waitForTimeSync();
+
   // ezTime event trigger
   events();
 
@@ -118,7 +129,7 @@ void everyDay() {
 }
 
 // Triggered every 5 Minutes by the ezTime events()
-void everyFiveMinutes() {
+void fullSync() {
   Serial.println("10 Seconds passed. Syncing to backend...");
 
   // First, sync pending changes to backend. Only then download (overwrite) local status by remote.
@@ -128,7 +139,7 @@ void everyFiveMinutes() {
     }
 
   // register next event
-  setEvent( everyFiveMinutes, nextFiveMinutes() );
+  setEvent( fullSync, nextFiveMinutes() );
 }
 
 // Calculate timestamp five minutes from now
@@ -441,9 +452,10 @@ void setPixelUndone(int arrayIndex) {
 void initLog() {
   if(LOG_DEBUG) {
     Serial.begin(9600);
-    /*while (!Serial) {
+    while (!Serial) {
       ; // wait for serial port to connect. Needed for native USB port only
-    }*/
+    }
+    Serial.println("Hello Serial");
   }
 }
 
@@ -471,17 +483,41 @@ void checkWifiFirmware() {
   }
 }
 
-void connectWifi() {
-  while (wifiStatus != WL_CONNECTED) {
-    log("Attempting to connect to SSID: ", LOG_WARNING);
-    
-    wifiStatus = WiFi.begin(ssid, pass);
-
-    // wait 10 seconds for connection:
-    delay(10000);
+// Block loop while time is not set
+void waitForTimeSync() {
+  while (timeStatus() == timeNotSet) {
+    if (wifiStatus != WL_CONNECTED) {
+      wifiStatus = WiFi.begin(ssid, pass);
+    } else {
+      waitForSync(5);
+      myTimezone.setLocation(F("de"));
+  
+      // if time finally synced; sync data
+      if(timeStatus() == timeSet) {
+        fullSync();
+      }
+    }
+    delay(5000);
   }
-  log("Connected to wifi", LOG_INFO);
-  printWifiStatus();
+}
+
+
+void connectWifi() {
+  if ( (millis() - wifiConnectDelay) > lastWifiConnectTime) {
+    wifiStatus = WiFi.status();
+    lastWifiConnectTime = millis();
+    
+    if(wifiStatus != WL_CONNECTED) {
+      log("Not connected to Wifi. Attempting to connect...", LOG_WARNING);
+  
+      wifiStatus = WiFi.begin(ssid, pass);
+  
+      if (wifiStatus == WL_CONNECTED) {
+        log("Successfully connected to wifi", LOG_INFO);
+        printWifiStatus();
+      }
+    }
+  }
 }
 
 void printWifiStatus() {
@@ -498,18 +534,6 @@ void printWifiStatus() {
   long rssi = WiFi.RSSI();
   log("signal strength (RSSI) in dBm:");
   Serial.println(rssi);
-}
-
-void ezTimeSetup() {
-  // enable ezTime debug info
-  setDebug(INFO);
-  
-  // sync with NTP server
-  waitForSync();
-
-  myTimezone.setLocation(F("de"));
-  
-  log("ezTime sync finished.");
 }
 
 // Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
