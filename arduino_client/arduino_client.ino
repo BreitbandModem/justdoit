@@ -80,6 +80,8 @@ void loop() {
   // ezTime event trigger
   events();
 
+  visualizeDoneHistory();
+
   int readButton = digitalRead(BUTTON_PIN);
   if (readButton != lastButtonState) {
     // reset the debouncing timer
@@ -217,15 +219,17 @@ bool syncDown() {
 }
 
 void visualizeDoneHistory() {
-  for (int i=0; i<PIXEL_COUNT; i++) {
-    Serial.print("Pixel #");
-    Serial.print(i);
-    Serial.print("  date: ");
-    Serial.print(pixelHistory[i].date);
-    Serial.print(" done: ");
-    Serial.println(pixelHistory[i].done);
+//  for (int i=0; i<PIXEL_COUNT; i++) {
+//    Serial.print("Pixel #");
+//    Serial.print(i);
+//    Serial.print("  date: ");
+//    Serial.print(pixelHistory[i].date);
+//    Serial.print(" done: ");
+//    Serial.println(pixelHistory[i].done);
 
-    if ( pixelHistory[i].syncme ) {
+    if ( i == 0 && ! pixelHistory[i].done) {
+      setPixelTodo(i);
+    } else if ( pixelHistory[i].syncme ) {
       setPixelPending(i);
     } else if ( pixelHistory[i].done ){
       setPixelDone(i);
@@ -437,6 +441,11 @@ void setPixelUndone(int arrayIndex) {
   strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
 }
 
+void setPixelTodo(int arrayIndex) {
+  int pixelIndex = translatePixelLocation(arrayIndex);
+  strip.setPixelColor(pixelIndex, strip.Color(  230, 40,   0));  // redish
+}
+
 void setPixelLoading(int arrayIndex) {
   int pixelIndex = translatePixelLocation(arrayIndex);
   strip.setPixelColor(pixelIndex, strip.Color(  127, 0,   0));  // red
@@ -497,6 +506,7 @@ void waitForTimeSync() {
         setEvent( everyDay, nextDay() );
 
         fullSync();
+        break;
       }
     }
     setPixelLoading(loadingPixel);
