@@ -219,7 +219,7 @@ bool syncDown() {
 }
 
 void visualizeDoneHistory() {
-//  for (int i=0; i<PIXEL_COUNT; i++) {
+  for (int i=0; i<PIXEL_COUNT; i++) {
 //    Serial.print("Pixel #");
 //    Serial.print(i);
 //    Serial.print("  date: ");
