@@ -8,7 +8,7 @@
 
 
 // Constants
-const bool LOG_DEBUG   = true;
+const bool LOG_DEBUG   = false;
 const byte LOG_INFO    = 0;
 const byte LOG_WARNING = 1;
 const byte LOG_ERROR   = 2;
@@ -62,26 +62,12 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);  // init button
   pinMode(PIR_PIN, INPUT);  // init PIR motion sensor
   initPixels();
-
-  strip.setPixelColor(59, strip.Color(  127, 0,   0));
-  strip.show();
   
   checkWifiModule();
   checkWifiFirmware();
-  connectWifi();
-  printWifiStatus();
 
-  // ezTime setup
+  // ezTime
   setDebug(INFO);
-  waitForTimeSync();
-  setEvent( fullSync, nextFiveMinutes() );
-  setEvent( everyDay, nextDay() );
-
-  strip.setPixelColor(59, strip.Color(  0, 127,   0));
-  strip.show();
-  
-  syncDown();
-  visualizeDoneHistory();
 }
 
 void loop() {
@@ -130,7 +116,7 @@ void everyDay() {
 
 // Triggered every 5 Minutes by the ezTime events()
 void fullSync() {
-  Serial.println("10 Seconds passed. Syncing to backend...");
+  Serial.println("Syncing to backend...");
 
   // First, sync pending changes to backend. Only then download (overwrite) local status by remote.
     if( syncUp() ) {
@@ -419,7 +405,7 @@ bool httpRequest(const char *method, char *body, DynamicJsonDocument * responseD
 }
 
 
-int translatePixelLocation(int arrayIndex) {
+int translatePixelLocation(int index) {
   // fill pixel ring backwards except for current day, which is on first pixel (0).
   // 0 ->  0
   // 1 -> 59
@@ -427,6 +413,8 @@ int translatePixelLocation(int arrayIndex) {
   // 3 -> 57
   
   int pixelIndex = 0;
+
+  int arrayIndex = index % PIXEL_COUNT;
   if (arrayIndex != 0) {
     pixelIndex = PIXEL_COUNT - arrayIndex;
   }
@@ -449,14 +437,19 @@ void setPixelUndone(int arrayIndex) {
   strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
 }
 
+void setPixelLoading(int arrayIndex) {
+  int pixelIndex = translatePixelLocation(arrayIndex);
+  strip.setPixelColor(pixelIndex, strip.Color(  127, 0,   0));  // red
+}
+
 void initLog() {
+  Serial.begin(9600);
   if(LOG_DEBUG) {
-    Serial.begin(9600);
     while (!Serial) {
       ; // wait for serial port to connect. Needed for native USB port only
     }
-    Serial.println("Hello Serial");
   }
+  Serial.println("Hello Serial");
 }
 
 void initPixels() {
@@ -485,6 +478,9 @@ void checkWifiFirmware() {
 
 // Block loop while time is not set
 void waitForTimeSync() {
+  // run a red pixel around the ring
+  int loadingPixel = 0;
+  
   while (timeStatus() == timeNotSet) {
     if (wifiStatus != WL_CONNECTED) {
       wifiStatus = WiFi.begin(ssid, pass);
@@ -492,15 +488,24 @@ void waitForTimeSync() {
       waitForSync(5);
       myTimezone.setLocation(F("de"));
   
-      // if time finally synced; sync data
+      // if time finally synced; setup events and load data
       if(timeStatus() == timeSet) {
+        // ezTime events setup
+        deleteEvent( fullSync ); 
+        deleteEvent( everyDay );
+        setEvent( fullSync, nextFiveMinutes() );
+        setEvent( everyDay, nextDay() );
+
         fullSync();
       }
     }
+    setPixelLoading(loadingPixel);
+    setPixelUndone(loadingPixel -1);
+    loadingPixel += 1;
+    strip.show();
     delay(5000);
   }
 }
-
 
 void connectWifi() {
   if ( (millis() - wifiConnectDelay) > lastWifiConnectTime) {
