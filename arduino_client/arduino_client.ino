@@ -71,6 +71,8 @@ void setup() {
 }
 
 void loop() {
+  visualizeDoneHistory();
+
   // if not connected wifi, try to reconnect
   connectWifi();
 
@@ -79,8 +81,6 @@ void loop() {
 
   // ezTime event trigger
   events();
-
-  visualizeDoneHistory();
 
   int readButton = digitalRead(BUTTON_PIN);
   if (readButton != lastButtonState) {
@@ -504,6 +504,11 @@ void waitForTimeSync() {
         deleteEvent( everyDay );
         setEvent( fullSync, nextFiveMinutes() );
         setEvent( everyDay, nextDay() );
+
+        // init today
+        strncpy(pixelHistory[0].date, myTimezone.dateTime(MYISO8601).c_str(), sizeof pixelHistory[0].date);
+        pixelHistory[0].done = false;
+        pixelHistory[0].syncme = false;
 
         fullSync();
         break;
