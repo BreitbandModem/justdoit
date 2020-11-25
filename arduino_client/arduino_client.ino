@@ -45,6 +45,11 @@ int currentButtonState;       // the actual current button state after debouncin
 int lastButtonState = HIGH;   // the previous reading from the input pin
 unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
 unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
+
+unsigned long lastPirTime = 0;  // the last time the PIR sensor was triggered by movement
+unsigned long pirDelay = 30000;  // Turn on LEDs for this long after PIR Sensor was triggered
+bool switchOn = false;  // whether to turn on or off the LEDs
+
 unsigned long lastWifiConnectTime = 0;  // the last time we tried to connect to wifi
 unsigned long wifiConnectDelay = 10000;  // wait this long before trying to reconnect to wifi
 
@@ -82,6 +87,16 @@ void loop() {
 
   // ezTime event trigger
   events();
+
+  int readPir = digitalRead(PIR_PIN);
+  if (readPir == HIGH) {
+    lastPirTime = millis();
+    switchOn = true;
+  }
+
+  if ((millis() - lastPirTime) > pirDelay) {
+    switchOn = false;
+  }
 
   int readButton = digitalRead(BUTTON_PIN);
   if (readButton != lastButtonState) {
@@ -425,34 +440,59 @@ int translatePixelLocation(int index) {
 
 void setPixelPending(int arrayIndex) {
   int pixelIndex = translatePixelLocation(arrayIndex);
-  strip.setPixelColor(pixelIndex, strip.Color(  127, 127,   0));  // yellow
+
+  if( switchOn) {
+    strip.setPixelColor(pixelIndex, strip.Color(  127, 127,   0));  // yellow
+  } else {
+    strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
+  }
 }
 
 void setPixelDone(int arrayIndex) {
   int pixelIndex = translatePixelLocation(arrayIndex);
-  float green = (float)pixelIndex / PIXEL_COUNT * 70.0 + 7.0;
-  float blue = (float)pixelIndex / PIXEL_COUNT * 127.0 + 12.7;
   
-  if ( pixelIndex == 0 ) {
-    green = 70.0;
-    blue = 127.0;
+  if( switchOn) {
+    float green = (float)pixelIndex / PIXEL_COUNT * 70.0 + 7.0;
+    float blue = (float)pixelIndex / PIXEL_COUNT * 127.0 + 12.7;
+    
+    if ( pixelIndex == 0 ) {
+      green = 70.0;
+      blue = 127.0;
+    }
+    strip.setPixelColor(pixelIndex, strip.Color(  0, ceil(green),   ceil(blue)));  // blueish
+  } else {
+    strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
   }
-  strip.setPixelColor(pixelIndex, strip.Color(  0, ceil(green),   ceil(blue)));  // blueish
 }
 
 void setPixelUndone(int arrayIndex) {
   int pixelIndex = translatePixelLocation(arrayIndex);
-  strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
+  
+  if( switchOn) {
+    strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
+  } else {
+    strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
+  }
 }
 
 void setPixelTodo(int arrayIndex) {
   int pixelIndex = translatePixelLocation(arrayIndex);
-  strip.setPixelColor(pixelIndex, strip.Color(  230, 40,   0));  // redish
+  
+  if( switchOn) {
+    strip.setPixelColor(pixelIndex, strip.Color(  230, 40,   0));  // redish
+  } else {
+    strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
+  }
 }
 
-void setPixelLoading(int arrayIndex) {
+void setPixelLoading(int arrayIndex) {    
   int pixelIndex = translatePixelLocation(arrayIndex);
-  strip.setPixelColor(pixelIndex, strip.Color(  127, 0,   0));  // red
+  
+  if( switchOn) {
+    strip.setPixelColor(pixelIndex, strip.Color(  127, 0,   0));  // red
+  } else {
+    strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
+  }
 }
 
 void initLog() {
