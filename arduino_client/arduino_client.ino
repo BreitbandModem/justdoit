@@ -48,7 +48,7 @@ unsigned long debounceDelay = 50;    // the debounce time; increase if the outpu
 
 unsigned long lastPirTime = 0;  // the last time the PIR sensor was triggered by movement
 unsigned long pirDelay = 30000;  // Turn on LEDs for this long after PIR Sensor was triggered
-bool switchOn = false;  // whether to turn on or off the LEDs
+bool switchOn = true;  // whether to turn on or off the LEDs
 
 unsigned long lastWifiConnectTime = 0;  // the last time we tried to connect to wifi
 unsigned long wifiConnectDelay = 10000;  // wait this long before trying to reconnect to wifi
@@ -459,6 +459,7 @@ void setPixelDone(int arrayIndex) {
       green = 70.0;
       blue = 127.0;
     }
+
     strip.setPixelColor(pixelIndex, strip.Color(  0, ceil(green),   ceil(blue)));  // blueish
   } else {
     strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
