@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <ezTime.h>
 #include <Adafruit_NeoPixel.h>
+#include <math.h>
 
 #include "arduino_secrets.h" 
 
@@ -167,14 +168,10 @@ void shiftPixelHistory() {
     pixelHistory[i] = pixelHistory[i-1];
   }
 
-  // Add new pixel for today (0)
-  PixelData todaysPixel;
-  
-  strncpy(todaysPixel.date, myTimezone.dateTime(MYISO8601).c_str(), sizeof todaysPixel.date);
-  todaysPixel.done = false;
-  todaysPixel.syncme = false;
-  
-  pixelHistory[0] = todaysPixel;
+  // Set todays pixel
+  strncpy(pixelHistory[0].date, myTimezone.dateTime(MYISO8601).c_str(), sizeof pixelHistory[0].date);
+  pixelHistory[0].done = false;
+  pixelHistory[0].syncme = false;
 
 }
 
@@ -185,8 +182,8 @@ bool syncDown() {
 //    http://localhost:5555/habit/meditation 
   const size_t requestCapacity = JSON_OBJECT_SIZE(2);
   DynamicJsonDocument requestDoc(requestCapacity);
-  
-  requestDoc["startDate"] = myTimezone.dateTime(MYISO8601).c_str();
+
+  requestDoc["startDate"] = String(pixelHistory[0].date).c_str();
   requestDoc["count"] = PIXEL_COUNT;
 
   char body[256];
@@ -433,7 +430,14 @@ void setPixelPending(int arrayIndex) {
 
 void setPixelDone(int arrayIndex) {
   int pixelIndex = translatePixelLocation(arrayIndex);
-  strip.setPixelColor(pixelIndex, strip.Color(  0, 70,   127));  // blueish
+  float green = (float)pixelIndex / PIXEL_COUNT * 70.0 + 7.0;
+  float blue = (float)pixelIndex / PIXEL_COUNT * 127.0 + 12.7;
+  
+  if ( pixelIndex == 0 ) {
+    green = 70.0;
+    blue = 127.0;
+  }
+  strip.setPixelColor(pixelIndex, strip.Color(  0, ceil(green),   ceil(blue)));  // blueish
 }
 
 void setPixelUndone(int arrayIndex) {
@@ -494,7 +498,7 @@ void waitForTimeSync() {
     if (wifiStatus != WL_CONNECTED) {
       wifiStatus = WiFi.begin(ssid, pass);
     } else {
-      waitForSync(5);
+      waitForSync(10);
       myTimezone.setLocation(F("de"));
   
       // if time finally synced; setup events and load data
