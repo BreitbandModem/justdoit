@@ -4,6 +4,8 @@
 #include <ezTime.h>
 #include <Adafruit_NeoPixel.h>
 #include <math.h>
+#include <ArduinoBearSSL.h>
+#include <ArduinoECCX08.h>
 
 #include "arduino_secrets.h" 
 
@@ -23,12 +25,12 @@ const byte LED_PIN     = 13;  // Arduino built-in LED
 const int  PIXEL_COUNT = 60;  // Number of NeoPixels
 const int  BRIGHTNESS  = 10;
 
-const IPAddress backendAddress(192,168,0,248);
-const int backendPort = 5555;
-
+// Supply backend address and certificate via secrets file
 // Wifi variables
 char ssid[] = SECRET_SSID;
 char pass[] = SECRET_PASS;
+const char* certificate = CERTIFICATE;
+const char backend[] = BACKEND_ADDRESS;
 int wifiStatus = WL_IDLE_STATUS;
 
 // Timing variables
@@ -39,6 +41,7 @@ Adafruit_NeoPixel strip(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 // Initialize the Wifi client library
 WiFiClient client;
+BearSSLClient sslClient(client);
 
 // Control flow variables
 int currentButtonState;       // the actual current button state after debouncing
@@ -62,6 +65,35 @@ struct PixelData {
 
 struct PixelData pixelHistory[PIXEL_COUNT];
 
+/*
+* Function prototypes
+*/
+void setup(void);
+void loop(void);
+bool syncUp(void);
+
+#ifdef __arm__
+// should use uinstd.h to define sbrk but Due causes a conflict
+extern "C" char* sbrk(int incr);
+#else  // __ARM__
+extern char *__brkval;
+#endif  // __arm__
+ 
+int freeMemory() {
+  char top;
+#ifdef __arm__
+  return &top - reinterpret_cast<char*>(sbrk(0));
+#elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
+  return &top - __brkval;
+#else  // __arm__
+  return __brkval ? &top - __brkval : &top - __malloc_heap_start;
+#endif  // __arm__
+}
+
+unsigned long getTimeBearSSL() {
+  return WiFi.getTime();
+}
+
 void setup() {
   initLog();
   pinMode(LED_PIN, OUTPUT);  // init artuino LED
@@ -71,6 +103,11 @@ void setup() {
   
   checkWifiModule();
   checkWifiFirmware();
+  
+  sslClient.setEccSlot(0, certificate);
+
+  Serial.print("Free memory: ");
+  Serial.println(freeMemory());
 
   // ezTime
   setDebug(INFO);
@@ -136,11 +173,20 @@ void everyDay() {
 void fullSync() {
   Serial.println("Syncing to backend...");
 
+  Serial.print("Free memory: ");
+  Serial.println(freeMemory());
+
+
   // First, sync pending changes to backend. Only then download (overwrite) local status by remote.
-    if( syncUp() ) {
-      syncDown();
-      visualizeDoneHistory();
-    }
+  bool syncedUp = syncUp();
+
+  Serial.print("Free memory: ");
+  Serial.println(freeMemory());
+  
+  if( syncedUp ) {
+    syncDown();
+    visualizeDoneHistory();
+  }
 
   // register next event
   setEvent( fullSync, nextFiveMinutes() );
@@ -191,30 +237,67 @@ void shiftPixelHistory() {
 }
 
 bool syncDown() {
-  Serial.println("Getting latest history from server ...");
-//  curl -X GET -H "Content-Type: application/json" \
-//    -d '{"startDate": "2020-11-15T10:14:43+01:00", "count": 60 }' \
-//    http://localhost:5555/habit/meditation 
-  const size_t requestCapacity = JSON_OBJECT_SIZE(2);
-  DynamicJsonDocument requestDoc(requestCapacity);
+  if (sslClient.connect(backend, 443)) {
+    Serial.println("connected to server");
 
-  requestDoc["startDate"] = String(pixelHistory[0].date).c_str();
-  requestDoc["count"] = PIXEL_COUNT;
+    DynamicJsonDocument requestDoc(32);
+    requestDoc["startDate"] = String(pixelHistory[0].date).c_str();
+    char body[64];
+  
+    DynamicJsonDocument responseDoc(128);
 
-  char body[256];
-  serializeJson(requestDoc, body);
+    for(int i=0; i<PIXEL_COUNT; i++) {
+      
+      requestDoc["count"] = i;
+      serializeJson(requestDoc, body);
+      size_t bodyLength = strlen(body);
 
-  const size_t responseCapacity = JSON_ARRAY_SIZE(PIXEL_COUNT) + JSON_OBJECT_SIZE(1) + PIXEL_COUNT*JSON_OBJECT_SIZE(3) + PIXEL_COUNT * 30;
-  DynamicJsonDocument responseDoc(responseCapacity);
+      sslClient.println("GET /habit/meditation HTTP/1.1");
+      sslClient.print("Host: ");
+      sslClient.println(backend);
+      sslClient.println("Content-type: application/json");
+      sslClient.println("Accept: */*");
+      sslClient.println("Cache-Control: no-cache");
+      sslClient.println("Accept-Encoding: gzip, deflate");
+      sslClient.print("Content-Length: ");
+      sslClient.println(bodyLength);
+      sslClient.println();
+      sslClient.println(body);
 
-  if (httpRequest("GET", body, &responseDoc)) {
-    // Write history from json to native pixelHistory array
-    Serial.println("Received History from backend. Updating local copy...");
-    JsonArray history = responseDoc["history"];
-    for (int i=0; i<PIXEL_COUNT; i++) {
-      JsonObject dayInHistory = history[i];
-      const char* date = dayInHistory["date"];
-      int done = dayInHistory["done"];
+      // Catch empty lines
+      while(sslClient.available()) {
+        Serial.write(sslClient.read());
+      }
+
+      // Check HTTP status
+      char status[32] = {0};
+      sslClient.readBytesUntil('\r', status, sizeof(status));
+      Serial.println(status);
+      // It should be "HTTP/1.0 200 OK" or "HTTP/1.1 200 CREATED"
+      if ( strcmp(status + 9, "200 OK") != 0 && strcmp(status + 9, "201 CREATED") != 0 ) 
+      {
+        Serial.print(F("Unexpected response: "));
+        Serial.println(status);
+        return false;
+      }
+  
+      // Skip HTTP headers
+      char endOfHeaders[] = "\r\n\r\n";
+      if (!sslClient.find(endOfHeaders)) 
+      {
+        Serial.println(F("Invalid response"));
+        return false;
+      }
+      
+      DeserializationError error = deserializeJson(responseDoc, sslClient);
+      if (error) {
+        Serial.print(F("deserializeJson() failed: "));
+        Serial.println(error.c_str());
+        return false;
+      }
+
+      const char* date = responseDoc["history"][0]["date"];
+      int done = responseDoc["history"][0]["done"];
 
       strncpy(pixelHistory[i].date, date, strlen(date));
       if (done == 1) {
@@ -224,8 +307,141 @@ bool syncDown() {
       }
       pixelHistory[i].syncme = false;
     }
+
+    // Close connection
+    sslClient.println("Connection: close");
+    sslClient.println();
+
+    // Catch remaining output
+    while(sslClient.available()) {
+      Serial.write(sslClient.read());
+    }
+
+    // Disconnect client
+    if (sslClient.connected()) {
+      sslClient.stop();
+    }
+
     return true;
   }
+}
+
+bool syncUp() {
+  Serial.println("Sync Up ..");
+  Serial.print("Free memory: ");
+  Serial.println(freeMemory());
+
+  if (sslClient.connect(backend, 443)) {
+    Serial.println("connected to server");
+    int successCount = 0;
+
+    DynamicJsonDocument requestDoc(48);
+    DynamicJsonDocument responseDoc(32);
+    char body[96];
+
+    for(int i=0; i<PIXEL_COUNT; i++) {
+
+      if( pixelHistory[i].syncme ) {
+
+        successCount += 1;
+
+        Serial.println("Date: ");
+        Serial.println(pixelHistory[i].date);
+        
+        requestDoc["dates"][0]["date"] = String(pixelHistory[i].date).c_str();
+        
+        serializeJson(requestDoc, body);
+        size_t bodyLength = strlen(body);
+        Serial.println(body);
+
+        if ( pixelHistory[i].done ) {
+          sslClient.print("POST");
+        } else {
+          sslClient.print("DELETE");
+        }
+
+        sslClient.println(" /habit/meditation HTTP/1.1");
+        sslClient.print("Host: ");
+        sslClient.println(backend);
+        sslClient.println("Content-type: application/json");
+        sslClient.println("Accept: */*");
+        sslClient.println("Cache-Control: no-cache");
+        sslClient.println("Accept-Encoding: gzip, deflate");
+        sslClient.print("Content-Length: ");
+        sslClient.println(bodyLength);
+        sslClient.println();
+        sslClient.println(body);
+  
+        // Catch empty lines
+        while(sslClient.available()) {
+          Serial.write(sslClient.read());
+        }
+  
+        // Check HTTP status
+        char status[32] = {0};
+        sslClient.readBytesUntil('\r', status, sizeof(status));
+        Serial.println(status);
+        // It should be "HTTP/1.0 200 OK" or "HTTP/1.1 200 CREATED"
+        if ( strcmp(status + 9, "200 OK") != 0 && strcmp(status + 9, "201 CREATED") != 0 ) 
+        {
+          Serial.print(F("Unexpected response: "));
+          Serial.println(status);
+          return false;
+        }
+    
+        // Skip HTTP headers
+        char endOfHeaders[] = "\r\n\r\n";
+        if (!sslClient.find(endOfHeaders)) 
+        {
+          Serial.println(F("Invalid response"));
+          return false;
+        }
+        
+        DeserializationError error = deserializeJson(responseDoc, sslClient);
+        if (error) {
+          Serial.print(F("deserializeJson() failed: "));
+          Serial.println(error.c_str());
+          return false;
+        }
+
+        if ( pixelHistory[i].done ) {
+          if (responseDoc["added"] >= 0 ) {
+            Serial.print("Server successfully added dates to backend.");
+            pixelHistory[i].syncme = false;
+            setPixelDone(i);
+            strip.show();
+            successCount -= 1;
+          }
+        } else {
+          if (responseDoc["deleted"] >= 0 ) {
+            Serial.print("Server successfully deleted dates from backend.");
+            pixelHistory[i].syncme = false;
+            setPixelUndone(i);
+            strip.show();
+            successCount -= 1;
+          }
+        }
+      }
+    }
+
+    // Close connection
+    sslClient.println("Connection: close");
+    sslClient.println();
+
+    // Catch remaining output
+    while(sslClient.available()) {
+      Serial.write(sslClient.read());
+    }
+
+    // Disconnect client
+    if (sslClient.connected()) {
+      sslClient.stop();
+    }
+
+    return (successCount == 0);
+  }
+
+  Serial.println("Failed to connect to server");
   
   return false;
 }
@@ -266,160 +482,6 @@ void buttonPress() {
   delay(1000);
   syncUp();
 }
-
-// submit pending updates to backend
-bool syncUp() {  
-  // allocate json object 
-  const size_t postRequestCapacity = JSON_ARRAY_SIZE(PIXEL_COUNT) + (PIXEL_COUNT+1)*JSON_OBJECT_SIZE(1);
-  DynamicJsonDocument postRequestDoc(postRequestCapacity);
-
-  const size_t deleteRequestCapacity = JSON_ARRAY_SIZE(PIXEL_COUNT) + (PIXEL_COUNT+1)*JSON_OBJECT_SIZE(1);
-  DynamicJsonDocument deleteRequestDoc(deleteRequestCapacity);
-
-  JsonArray postDates = postRequestDoc.createNestedArray("dates");
-  JsonArray deleteDates = deleteRequestDoc.createNestedArray("dates");
-
-  // populate json with syncme data
-  bool postRequired = false;
-  bool deleteRequired = false;
-  for (int i=0; i<PIXEL_COUNT; i++) {
-    if( pixelHistory[i].syncme ) {
-      if ( pixelHistory[i].done ) {
-        
-        // Add date to backend
-        JsonObject date = postDates.createNestedObject();
-        date["date"] = pixelHistory[i].date;
-        postRequired = true;
-        
-      } else {
-        
-        // Delete date from backend
-        JsonObject date = deleteDates.createNestedObject();
-        date["date"] = pixelHistory[i].date;
-        deleteRequired = true;
-        
-      }
-    }
-  }
-
-  // Allocate the body and JSON response document
-  char body[3000];
-  const size_t responseRequest = JSON_OBJECT_SIZE(1) + 10;
-  DynamicJsonDocument responseDoc(responseRequest);
-
-  bool postSuccess = false;
-  bool deleteSuccess = false;
-
-  // Send post request to add dates to backend
-  if ( postRequired ) {
-    serializeJson(postRequestDoc, body);
-    if (httpRequest("POST", body, &responseDoc)) {
-      if (responseDoc["added"] >= 0 ) {
-        Serial.print("Server successfully added dates to backend.");
-        postSuccess = true;
-      }
-    }
-  } else {
-    postSuccess = true;
-  }
-
-  // Send delete request to delete dates from backend
-  if ( deleteRequired ) {
-    serializeJson(deleteRequestDoc, body);
-    if (httpRequest("DELETE", body, &responseDoc)) {
-      if (responseDoc["deleted"] >= 0 ) {
-        Serial.print("Server successfully deleted dates from backend.");
-        deleteSuccess = true;
-      }
-    }
-  } else {
-    deleteSuccess = true;
-  }
-
-  // untag syncme flags and set pixel color
-  for (int i=0; i<PIXEL_COUNT; i++) {
-    if( pixelHistory[i].syncme ) {
-      if ( pixelHistory[i].done && postSuccess) {
-        pixelHistory[i].syncme = false;
-        setPixelDone(i);
-      } else if ( !pixelHistory[i].done && deleteSuccess) {
-        pixelHistory[i].syncme = false;
-        setPixelUndone(i);
-      }
-    }
-  }
-  strip.show();
-
-  // only return true if everything has been completely synced up to the backend
-  if ( postSuccess && deleteSuccess ) {
-    return true;
-  }
-
-  return false;
-  
-}
-
-bool httpRequest(const char *method, char *body, DynamicJsonDocument * responseDoc) {
-  // if there's a successful connection:
-  if (client.connect(backendAddress, backendPort)) 
-  {
-    log("connecting to backend ... ");
-  
-    log("body length:");
-    size_t bodyLength = strlen(body);
-    Serial.println(bodyLength);
-    log("body content:");
-    Serial.println(body);
-
-    client.print(method);
-    client.println(" /habit/meditation HTTP/1.1"); 
-    client.print("Host: ");
-    client.println(backendAddress);
-    client.println("Content-type: application/json");
-    client.println("Accept: */*");
-    client.println("Cache-Control: no-cache");
-    client.println("Accept-Encoding: gzip, deflate");
-    client.print("Content-Length: ");
-    client.println(bodyLength);
-    client.println("Connection: close");
-    client.println();
-    client.println(body);
-
-    // Check HTTP status
-    char status[32] = {0};
-    client.readBytesUntil('\r', status, sizeof(status));
-    Serial.println(status);
-    // It should be "HTTP/1.0 200 OK" or "HTTP/1.1 200 CREATED"
-    if ( strcmp(status + 9, "200 OK") != 0 && strcmp(status + 9, "201 CREATED") != 0 ) 
-    {
-      Serial.print(F("Unexpected response: "));
-      Serial.println(status);
-      return false;
-    }
-
-    // Skip HTTP headers
-    char endOfHeaders[] = "\r\n\r\n";
-    if (!client.find(endOfHeaders)) 
-    {
-      Serial.println(F("Invalid response"));
-      return false;
-    }
-    
-    DeserializationError error = deserializeJson(*responseDoc, client);
-    if (error) {
-      Serial.print(F("deserializeJson() failed: "));
-      Serial.println(error.c_str());
-      return false;
-    }
-
-    // no errors so far, we got a json response. Return successfull.
-    return true;
-  }
-
-  // couldn't connect to server.
-  return false;
-}
-
 
 int translatePixelLocation(int index) {
   // fill pixel ring backwards except for current day, which is on first pixel (0).
@@ -530,10 +592,64 @@ void checkWifiFirmware() {
   }
 }
 
+void testBackend(const char *logmessage) {
+  // connect
+  Serial.print("\nStarting connection to server ");
+  Serial.println(logmessage);
+
+  // TODO: remove these two lines
+  ArduinoBearSSL.onGetTime(getTimeBearSSL);
+  sslClient.setEccSlot(0, certificate);
+  
+  // if you get a connection, report back via serial:
+  if (sslClient.connect(backend, 443)) {
+    Serial.println("connected to server");
+    // Make a HTTP request:
+    sslClient.println("GET /habits HTTP/1.1");
+    sslClient.print("Host: ");
+    sslClient.println(backend);
+    sslClient.println("Connection: close");
+    sslClient.println();
+  } else {
+    Serial.println("Failed to connect.");
+    sslClient.stop();
+  }
+  
+  Serial.print("available: ");
+  Serial.println(sslClient.available());
+  Serial.print("connected: ");
+  Serial.println(sslClient.connected());
+
+  while(sslClient.connected()) {
+    if(sslClient.available()) {
+      while(sslClient.available()) {
+        Serial.write(sslClient.read());
+      }
+      sslClient.stop();
+      break;
+    }
+  }
+}
+
 // Block loop while time is not set
 void waitForTimeSync() {
+  if (timeStatus() == timeSet && WiFi.getTime() > 0) {
+    return;
+  }
+  
   // run a red pixel around the ring
   int loadingPixel = 0;
+
+  while (WiFi.getTime() <= 0 ) {
+    Serial.println("Waiting for wifi time");
+    setPixelLoading(loadingPixel);
+    setPixelUndone(loadingPixel -1);
+    loadingPixel += 1;
+    strip.show();
+    delay(500);
+  }
+
+  ArduinoBearSSL.onGetTime(getTimeBearSSL);
   
   while (timeStatus() == timeNotSet) {
     if (wifiStatus != WL_CONNECTED) {
@@ -542,20 +658,9 @@ void waitForTimeSync() {
       waitForSync(10);
       myTimezone.setLocation(F("de"));
   
-      // if time finally synced; setup events and load data
+      // if ez time eventually synced
+      // then setup events and sync with backend
       if(timeStatus() == timeSet) {
-        // ezTime events setup
-        deleteEvent( fullSync ); 
-        deleteEvent( everyDay );
-        setEvent( fullSync, nextFiveMinutes() );
-        setEvent( everyDay, nextDay() );
-
-        // init today
-        strncpy(pixelHistory[0].date, myTimezone.dateTime(MYISO8601).c_str(), sizeof pixelHistory[0].date);
-        pixelHistory[0].done = false;
-        pixelHistory[0].syncme = false;
-
-        fullSync();
         break;
       }
     }
@@ -565,6 +670,19 @@ void waitForTimeSync() {
     strip.show();
     delay(5000);
   }
+
+  // ezTime events setup
+  deleteEvent( fullSync );
+  deleteEvent( everyDay );
+  // setEvent( fullSync, nextFiveMinutes() );
+  setEvent( everyDay, nextDay() );
+
+  // init today
+  strncpy(pixelHistory[0].date, myTimezone.dateTime(MYISO8601).c_str(), sizeof pixelHistory[0].date);
+  pixelHistory[0].done = false;
+  pixelHistory[0].syncme = false;
+
+  fullSync();
 }
 
 void connectWifi() {
