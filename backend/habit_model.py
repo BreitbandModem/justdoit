@@ -22,6 +22,23 @@ class HabitModel:
             self.logger.info('Dates file exists: %s', self.dates_filename)
 
     def get_history(self, start_date, count):
+        """Get single date by counting back from start_date"""
+        history = {"history": []}
+
+        start_date = datetime.fromisoformat(start_date)
+        count_date = start_date - timedelta(count)
+
+        done = 0
+        with open(self.dates_filename, 'r') as dates_file:
+            if count_date.strftime("%Y-%m-%d") in dates_file.read():
+                done = 1
+    
+        date = {"date": count_date.isoformat(), "done": done}
+        history["history"].append(date)
+        
+        return history
+
+    def get_history_padded(self, start_date, count):
         """Get interpolated list of dates from last x days."""
         history = {"history": []}
 
@@ -32,16 +49,15 @@ class HabitModel:
 
         index = 0
         for date in daterange(start_date, count):
-            self.logger.info('Date: %s', date.strftime("%Y-%m-%d"))
-            self.logger.info("Date iso! %s", date.isoformat())
+            # self.logger.info('Date: %s', date.strftime("%Y-%m-%d"))
+            # self.logger.info("Date iso! %s", date.isoformat())
 
             done = 0
 
             if date.strftime("%Y-%m-%d") in dates_file_read:
-                self.logger.info("Done! %s", date)
                 done = 1
 
-            item = {"index": index, "date": date.isoformat(), "done": done}
+            item = {"date": date.isoformat(), "done": done}
             history["history"].append(item)
 
             index += 1
