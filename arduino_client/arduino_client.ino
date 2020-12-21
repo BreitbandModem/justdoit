@@ -241,14 +241,15 @@ bool syncDown() {
     Serial.println("connected to server");
 
     DynamicJsonDocument requestDoc(32);
-    requestDoc["startDate"] = String(pixelHistory[0].date).c_str();
-    char body[64];
   
     DynamicJsonDocument responseDoc(128);
 
     for(int i=0; i<PIXEL_COUNT; i++) {
       
+      requestDoc["startDate"] = String(pixelHistory[0].date).c_str();
       requestDoc["count"] = i;
+      
+      char body[64];
       serializeJson(requestDoc, body);
       size_t bodyLength = strlen(body);
 
