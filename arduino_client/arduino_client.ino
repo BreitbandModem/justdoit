@@ -338,7 +338,6 @@ bool syncUp() {
 
     DynamicJsonDocument requestDoc(48);
     DynamicJsonDocument responseDoc(32);
-    char body[96];
 
     for(int i=0; i<PIXEL_COUNT; i++) {
 
@@ -351,8 +350,10 @@ bool syncUp() {
         
         requestDoc["dates"][0]["date"] = String(pixelHistory[i].date).c_str();
         
+        char body[96];
         serializeJson(requestDoc, body);
         size_t bodyLength = strlen(body);
+        
         Serial.println(body);
 
         if ( pixelHistory[i].done ) {
@@ -580,7 +581,7 @@ void initPixels() {
 
 void checkWifiModule() {
   if (WiFi.status() == WL_NO_MODULE) {
-    log("Communication with WiFi module failed!", LOG_ERROR);
+    Serial.println("Communication with WiFi module failed!");
     // don't continue
     while (true);
   }
@@ -589,7 +590,7 @@ void checkWifiModule() {
 void checkWifiFirmware() {
   String fv = WiFi.firmwareVersion();
   if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
-    log("Please upgrade the firmware", LOG_WARNING);
+    Serial.println("Please upgrade the firmware");
   }
 }
 
@@ -692,12 +693,12 @@ void connectWifi() {
     lastWifiConnectTime = millis();
     
     if(wifiStatus != WL_CONNECTED) {
-      log("Not connected to Wifi. Attempting to connect...", LOG_WARNING);
+      Serial.println("Not connected to Wifi. Attempting to connect...");
   
       wifiStatus = WiFi.begin(ssid, pass);
   
       if (wifiStatus == WL_CONNECTED) {
-        log("Successfully connected to wifi", LOG_INFO);
+        Serial.println("Successfully connected to wifi");
         printWifiStatus();
       }
     }
@@ -706,17 +707,17 @@ void connectWifi() {
 
 void printWifiStatus() {
   // print the SSID of the network you're attached to:
-  log("SSID: ", LOG_INFO);
+  Serial.print("SSID: ");
   Serial.println(WiFi.SSID());
 
   // print your board's IP address:
   IPAddress ip = WiFi.localIP();
-  log("IP Address: ");
+  Serial.print("IP Address: ");
   Serial.println(ip);
 
   // print the received signal strength:
   long rssi = WiFi.RSSI();
-  log("signal strength (RSSI) in dBm:");
+  Serial.print("signal strength (RSSI) in dBm:");
   Serial.println(rssi);
 }
 
@@ -741,37 +742,5 @@ void rainbow(int wait) {
     }
     strip.show(); // Update strip with new contents
     delay(wait);  // Pause for a moment
-  }
-}
-
-
-void log(const char *logmessage) {
-  log(logmessage, LOG_INFO);
-}
-
-void log(const char *logmessage, byte severity) {
-  if(LOG_DEBUG) {
-    Serial.print(myTimezone.dateTime(ISO8601));
-
-    switch(severity) {
-      case LOG_INFO:
-        Serial.print(" - INFO  - ");
-        break;
-      case LOG_WARNING:
-        Serial.print(" - WARN  - ");
-        break;
-      case LOG_ERROR:
-        Serial.print(" - ERROR - ");
-        strip.setPixelColor(59, strip.Color(  127, 0,   0));
-        strip.show();
-        break;
-      default:
-        Serial.print(" - ");
-        break;
-    }
-
-    Serial.print(logmessage);
-    Serial.print("\n");
-    
   }
 }
