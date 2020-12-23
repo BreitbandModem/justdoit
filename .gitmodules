@@ -13,3 +13,6 @@
 [submodule "arduino/lib/WiFiNINA"]
 	path = arduino/lib/WiFiNINA
 	url = https://github.com/arduino-libraries/WiFiNINA.git
+[submodule "arduino/lib/ezTime"]
+	path = arduino/lib/ezTime
+	url = https://github.com/ropg/ezTime.git
