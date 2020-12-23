@@ -15,7 +15,7 @@
 	url = https://github.com/arduino-libraries/WiFiNINA.git
 [submodule "arduino/lib/ezTime"]
 	path = arduino/lib/ezTime
-	url = https://github.com/ropg/ezTime.git
+	url = https://github.com/BreitbandModem/ezTime.git
 [submodule "arduino/lib/Adafruit_NeoPixel"]
 	path = arduino/lib/Adafruit_NeoPixel
 	url = https://github.com/adafruit/Adafruit_NeoPixel.git
