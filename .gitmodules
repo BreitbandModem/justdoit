@@ -16,3 +16,6 @@
 [submodule "arduino/lib/ezTime"]
 	path = arduino/lib/ezTime
 	url = https://github.com/ropg/ezTime.git
+[submodule "arduino/lib/Adafruit_NeoPixel"]
+	path = arduino/lib/Adafruit_NeoPixel
+	url = https://github.com/adafruit/Adafruit_NeoPixel.git
