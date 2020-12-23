@@ -43,6 +43,8 @@ def get_dates():
 
     }
 
+    app.logger.info('Get request body: %s', request.data)
+
     history_json = json.loads(request.data)
     if history_json is not None:
         try:
@@ -54,7 +56,7 @@ def get_dates():
             app.logger.warning(e)
             return jsonify({'history': []}), 400
         else:
-            app.logger.info('Retreiving history for last %s days.', history_json['count'])
+            app.logger.info('Retreiving history for last %s days from %s', history_json['count'], history_json["startDate"])
             history = meditation_habit.get_history(history_json["startDate"], history_json["count"])
             return jsonify(history), 200
 
