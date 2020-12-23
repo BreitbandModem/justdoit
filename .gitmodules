@@ -1,3 +1,6 @@
 [submodule "arduino/Arduino-Makefile"]
 	path = arduino/Arduino-Makefile
 	url = https://github.com/sudar/Arduino-Makefile.git
+[submodule "arduino/lib/ArduinoBearSSL"]
+	path = arduino/lib/ArduinoBearSSL
+	url = https://github.com/arduino-libraries/ArduinoBearSSL.git
