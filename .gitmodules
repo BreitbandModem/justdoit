@@ -10,3 +10,6 @@
 [submodule "arduino/lib/ArduinoJson"]
 	path = arduino/lib/ArduinoJson
 	url = https://github.com/bblanchon/ArduinoJson.git
+[submodule "arduino/lib/WiFiNINA"]
+	path = arduino/lib/WiFiNINA
+	url = https://github.com/arduino-libraries/WiFiNINA.git
