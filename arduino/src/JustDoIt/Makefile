@@ -34,7 +34,8 @@ ARDUINO_PACKAGE_DIR := $(HOME)/Library/Arduino15/packages
 ### OBJDIR
 ### This is were you put the binaries you just compile using 'make'
 #CURRENT_DIR       = $(shell basename $(CURDIR))
-OBJDIR            = $(PROJECT_DIR)/build
+OBJDIR            = $(PROJECT_DIR)/build/justdoit
 
 ### path to Arduino.mk, inside the ARDMK_DIR, don't touch.
 include $(ARDMK_DIR)/Sam.mk
+
