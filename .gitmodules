@@ -4,3 +4,6 @@
 [submodule "arduino/lib/ArduinoBearSSL"]
 	path = arduino/lib/ArduinoBearSSL
 	url = https://github.com/arduino-libraries/ArduinoBearSSL.git
+[submodule "arduino/lib/ArduinoECCX08"]
+	path = arduino/lib/ArduinoECCX08
+	url = https://github.com/arduino-libraries/ArduinoECCX08.git
