@@ -1,3 +1,5 @@
 .idea/
+**/.DS_Store
 backend/*.csv
 arduino_secrets.h
+arduino/build/*
