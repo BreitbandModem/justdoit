@@ -7,3 +7,6 @@
 [submodule "arduino/lib/ArduinoECCX08"]
 	path = arduino/lib/ArduinoECCX08
 	url = https://github.com/arduino-libraries/ArduinoECCX08.git
+[submodule "arduino/lib/ArduinoJson"]
+	path = arduino/lib/ArduinoJson
+	url = https://github.com/bblanchon/ArduinoJson.git
