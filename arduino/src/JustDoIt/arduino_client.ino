@@ -1,3 +1,4 @@
+#include <Wire.h>
 #include <SPI.h>
 #include <WiFiNINA.h>
 #include <ArduinoJson.h>
@@ -71,6 +72,32 @@ struct PixelData pixelHistory[PIXEL_COUNT];
 void setup(void);
 void loop(void);
 bool syncUp(void);
+void setPixelPending(int);
+void setPixelUndone(int);
+void setPixelDone(int);
+void setPixelTodo(int);
+void setPixelLoading(int);
+int freeMemory();
+unsigned long getTimeBearSSL();
+void everyDay();
+void fullSync();
+time_t nextFiveMinutes();
+time_t nextDay();
+void shiftPixelHistory();
+bool syncDown();
+void visualizeDoneHistory();
+void buttonPress();
+int translatePixelLocation(int);
+void initLog();
+void initPixels();
+void checkWifiModule();
+void checkWifiFirmware();
+void testBackend(const char*);
+void waitForTimeSync();
+void connectWifi();
+void printWifiStatus();
+void rainbow(int);
+
 
 #ifdef __arm__
 // should use uinstd.h to define sbrk but Due causes a conflict
