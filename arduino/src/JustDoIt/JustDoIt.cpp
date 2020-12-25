@@ -1,3 +1,6 @@
+#include "JustDoIt.h"
+#include "arduino_secrets.h" 
+
 #include <Wire.h>
 #include <SPI.h>
 #include <WiFiNINA.h>
@@ -8,16 +11,7 @@
 #include <ArduinoBearSSL.h>
 #include <ArduinoECCX08.h>
 
-#include "arduino_secrets.h" 
-
-
-// Constants
-const bool LOG_DEBUG   = false;
-const byte LOG_INFO    = 0;
-const byte LOG_WARNING = 1;
-const byte LOG_ERROR   = 2;
-
-const char MYISO8601[] = "Y-m-d~TH:i:sP";  // 2020-11-15T07:42:02+01:00
+#include "It.h"
 
 const byte BUTTON_PIN  = 2;
 const byte PIR_PIN     = 3;
@@ -57,14 +51,8 @@ bool switchOn = true;  // whether to turn on or off the LEDs
 unsigned long lastWifiConnectTime = 0;  // the last time we tried to connect to wifi
 unsigned long wifiConnectDelay = 10000;  // wait this long before trying to reconnect to wifi
 
-
-struct PixelData {
-   char date[26];
-   bool done;
-   bool syncme;
-};
-
-struct PixelData pixelHistory[PIXEL_COUNT];
+// struct PixelData pixelHistory[PIXEL_COUNT];
+It stripData[PIXEL_COUNT];
 
 /*
 * Function prototypes
@@ -250,16 +238,18 @@ time_t nextDay() {
 }
 
 void shiftPixelHistory() {
+  // Free memory of it that falls of the table!
+  stripData[PIXEL_COUNT - 1].destroy();
 
   // Shift all pixels to the 'right' (last pixel will be dropped)
   for (int i=PIXEL_COUNT-1; i>0; i--) {
-    pixelHistory[i] = pixelHistory[i-1];
+    stripData[i] = stripData[i-1];
   }
 
   // Set todays pixel
-  strncpy(pixelHistory[0].date, myTimezone.dateTime(MYISO8601).c_str(), sizeof pixelHistory[0].date);
-  pixelHistory[0].done = false;
-  pixelHistory[0].syncme = false;
+  stripData[0].setDate(myTimezone.dateTime(It::MYISO8601));
+  stripData[0].setDone(false);
+  stripData[0].setSynced(true);
 
 }
 
@@ -273,7 +263,7 @@ bool syncDown() {
 
     for(int i=0; i<PIXEL_COUNT; i++) {
       
-      requestDoc["startDate"] = String(pixelHistory[0].date).c_str();
+      requestDoc["startDate"] = String(stripData[0].getDate()).c_str();
       requestDoc["count"] = i;
       
       char body[64];
@@ -327,13 +317,13 @@ bool syncDown() {
       const char* date = responseDoc["history"][0]["date"];
       int done = responseDoc["history"][0]["done"];
 
-      strncpy(pixelHistory[i].date, date, strlen(date));
+      stripData[i].setDate(date);
       if (done == 1) {
-        pixelHistory[i].done = true;
+        stripData[i].setDone(true);
       } else {
-        pixelHistory[i].done = false;
+        stripData[i].setDone(false);
       }
-      pixelHistory[i].syncme = false;
+      stripData[i].setSynced(true);
     }
 
     // Close connection
@@ -368,14 +358,14 @@ bool syncUp() {
 
     for(int i=0; i<PIXEL_COUNT; i++) {
 
-      if( pixelHistory[i].syncme ) {
+      if(! stripData[i].isSynced()) {
 
         successCount += 1;
 
         Serial.println("Date: ");
-        Serial.println(pixelHistory[i].date);
+        Serial.println(stripData[i].getDate());
         
-        requestDoc["dates"][0]["date"] = String(pixelHistory[i].date).c_str();
+        requestDoc["dates"][0]["date"] = String(stripData[i].getDate()).c_str();
         
         char body[96];
         serializeJson(requestDoc, body);
@@ -383,7 +373,7 @@ bool syncUp() {
         
         Serial.println(body);
 
-        if ( pixelHistory[i].done ) {
+        if(stripData[i].isDone()) {
           sslClient.print("POST");
         } else {
           sslClient.print("DELETE");
@@ -433,10 +423,10 @@ bool syncUp() {
           return false;
         }
 
-        if ( pixelHistory[i].done ) {
+        if(stripData[i].isDone()) {
           if (responseDoc["added"] >= 0 ) {
             Serial.print("Server successfully added dates to backend.");
-            pixelHistory[i].syncme = false;
+            stripData[i].setSynced(true);
             setPixelDone(i);
             strip.show();
             successCount -= 1;
@@ -444,7 +434,7 @@ bool syncUp() {
         } else {
           if (responseDoc["deleted"] >= 0 ) {
             Serial.print("Server successfully deleted dates from backend.");
-            pixelHistory[i].syncme = false;
+            stripData[i].setSynced(true);
             setPixelUndone(i);
             strip.show();
             successCount -= 1;
@@ -477,18 +467,11 @@ bool syncUp() {
 
 void visualizeDoneHistory() {
   for (int i=0; i<PIXEL_COUNT; i++) {
-//    Serial.print("Pixel #");
-//    Serial.print(i);
-//    Serial.print("  date: ");
-//    Serial.print(pixelHistory[i].date);
-//    Serial.print(" done: ");
-//    Serial.println(pixelHistory[i].done);
-
-    if ( i == 0 && ! pixelHistory[i].done) {
+    if ( i == 0 && ! stripData[i].isDone()) {
       setPixelTodo(i);
-    } else if ( pixelHistory[i].syncme ) {
+    } else if (! stripData[i].isSynced() ) {
       setPixelPending(i);
-    } else if ( pixelHistory[i].done ){
+    } else if ( stripData[i].isDone() ){
       setPixelDone(i);
     } else {
       setPixelUndone(i);
@@ -500,9 +483,9 @@ void visualizeDoneHistory() {
 // when button is pressed, update latest day in history and mark for sync
 void buttonPress() {
   
-  strncpy(pixelHistory[0].date, myTimezone.dateTime(MYISO8601).c_str(), sizeof pixelHistory[0].date);
-  pixelHistory[0].done = !pixelHistory[0].done;
-  pixelHistory[0].syncme = true;
+  stripData[0].setDate(myTimezone.dateTime(It::MYISO8601));
+  stripData[0].setDone(! stripData[0].isDone());
+  stripData[0].setSynced(false);
 
   // sync pending -> green
   setPixelPending(0);
@@ -589,7 +572,7 @@ void setPixelLoading(int arrayIndex) {
 
 void initLog() {
   Serial.begin(9600);
-  if(LOG_DEBUG) {
+  if(false) {
     while (!Serial) {
       ; // wait for serial port to connect. Needed for native USB port only
     }
@@ -707,9 +690,9 @@ void waitForTimeSync() {
   setEvent( everyDay, nextDay() );
 
   // init today
-  strncpy(pixelHistory[0].date, myTimezone.dateTime(MYISO8601).c_str(), sizeof pixelHistory[0].date);
-  pixelHistory[0].done = false;
-  pixelHistory[0].syncme = false;
+  stripData[0].setDate(myTimezone.dateTime(It::MYISO8601));
+  stripData[0].setDone(false);
+  stripData[0].setSynced(true);
 
   fullSync();
 }
