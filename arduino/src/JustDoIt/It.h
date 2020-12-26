@@ -1,8 +1,6 @@
 #ifndef _IT_H_
 #define _IT_H_
 
-// #include <string>
-// #include <iostream> 
 #include <Arduino.h>
 
 class It {
