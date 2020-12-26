@@ -1,21 +1,20 @@
 #include "JustDoIt.h"
 #include "arduino_secrets.h" 
+#include "Strip.h"
+#include "It.h"
 
 #include <Wire.h>
 #include <SPI.h>
 #include <WiFiNINA.h>
-#include <ArduinoJson.h>
+// #include <ArduinoJson.h>
 #include <ezTime.h>
-#include <Adafruit_NeoPixel.h>
-#include <math.h>
+// #include <Adafruit_NeoPixel.h>
 #include <ArduinoBearSSL.h>
 #include <ArduinoECCX08.h>
 
-#include "It.h"
-
 const byte BUTTON_PIN  = 2;
 const byte PIR_PIN     = 3;
-const byte PIXEL_PIN   = 6;
+const int PIXEL_PIN   = 6;
 const byte LED_PIN     = 13;  // Arduino built-in LED
 const int  PIXEL_COUNT = 60;  // Number of NeoPixels
 const int  BRIGHTNESS  = 10;
@@ -32,7 +31,7 @@ int wifiStatus = WL_IDLE_STATUS;
 Timezone myTimezone;
 
 // Pixel variables
-Adafruit_NeoPixel strip(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
+Strip strip(PIXEL_COUNT, PIXEL_PIN, BRIGHTNESS);
 
 // Initialize the Wifi client library
 WiFiClient client;
@@ -52,58 +51,24 @@ unsigned long lastWifiConnectTime = 0;  // the last time we tried to connect to 
 unsigned long wifiConnectDelay = 10000;  // wait this long before trying to reconnect to wifi
 
 // struct PixelData pixelHistory[PIXEL_COUNT];
-It stripData[PIXEL_COUNT];
+// It stripData[PIXEL_COUNT];
 
 /*
 * Function prototypes
 */
 void setup(void);
 void loop(void);
-bool syncUp(void);
-void setPixelPending(int);
-void setPixelUndone(int);
-void setPixelDone(int);
-void setPixelTodo(int);
-void setPixelLoading(int);
-int freeMemory();
 unsigned long getTimeBearSSL();
 void everyDay();
 void fullSync();
 time_t nextFiveMinutes();
 time_t nextDay();
-void shiftPixelHistory();
-bool syncDown();
-void visualizeDoneHistory();
-void buttonPress();
-int translatePixelLocation(int);
 void initLog();
-void initPixels();
 void checkWifiModule();
 void checkWifiFirmware();
-void testBackend(const char*);
 void waitForTimeSync();
 void connectWifi();
 void printWifiStatus();
-void rainbow(int);
-
-
-#ifdef __arm__
-// should use uinstd.h to define sbrk but Due causes a conflict
-extern "C" char* sbrk(int incr);
-#else  // __ARM__
-extern char *__brkval;
-#endif  // __arm__
- 
-int freeMemory() {
-  char top;
-#ifdef __arm__
-  return &top - reinterpret_cast<char*>(sbrk(0));
-#elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
-  return &top - __brkval;
-#else  // __arm__
-  return __brkval ? &top - __brkval : &top - __malloc_heap_start;
-#endif  // __arm__
-}
 
 unsigned long getTimeBearSSL() {
   return WiFi.getTime();
@@ -114,22 +79,20 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);  // init artuino LED
   pinMode(BUTTON_PIN, INPUT_PULLUP);  // init button
   pinMode(PIR_PIN, INPUT);  // init PIR motion sensor
-  initPixels();
   
   checkWifiModule();
   checkWifiFirmware();
   
   sslClient.setEccSlot(0, certificate);
 
-  Serial.print("Free memory: ");
-  Serial.println(freeMemory());
-
   // ezTime
   setDebug(INFO);
+  Serial.print("Free memory: ");
+  Serial.println(Strip::freeMemory());
 }
 
 void loop() {
-  visualizeDoneHistory();
+  strip.visualize();
 
   // if not connected wifi, try to reconnect
   connectWifi();
@@ -165,7 +128,8 @@ void loop() {
 
       // Button has been pressed
       if (currentButtonState == LOW) {
-        buttonPress();
+        Serial.println("Button pressed.");
+        strip.done(0, myTimezone.dateTime(It::MYISO8601), backend, &sslClient);
       }
     }
   }
@@ -177,8 +141,8 @@ void loop() {
 void everyDay() {
   Serial.println("Next Day. Shifting pixelHistory...");
 
-  shiftPixelHistory();
-  visualizeDoneHistory();
+  strip.newDay(myTimezone.dateTime(It::MYISO8601));
+  strip.visualize();
 
   // register next event
   setEvent( everyDay, nextDay() );
@@ -189,19 +153,9 @@ void fullSync() {
   Serial.println("Syncing to backend...");
 
   Serial.print("Free memory: ");
-  Serial.println(freeMemory());
+  Serial.println(Strip::freeMemory());
 
-
-  // First, sync pending changes to backend. Only then download (overwrite) local status by remote.
-  bool syncedUp = syncUp();
-
-  Serial.print("Free memory: ");
-  Serial.println(freeMemory());
-  
-  if( syncedUp ) {
-    syncDown();
-    visualizeDoneHistory();
-  }
+  strip.sync(backend, &sslClient);
 
   // register next event
   setEvent( fullSync, nextFiveMinutes() );
@@ -237,356 +191,14 @@ time_t nextDay() {
   return makeTime(tm);
 }
 
-void shiftPixelHistory() {
-  // Free memory of it that falls of the table!
-  stripData[PIXEL_COUNT - 1].destroy();
-
-  // Shift all pixels to the 'right' (last pixel will be dropped)
-  for (int i=PIXEL_COUNT-1; i>0; i--) {
-    stripData[i] = stripData[i-1];
-  }
-
-  // Set todays pixel
-  stripData[0].setDate(myTimezone.dateTime(It::MYISO8601));
-  stripData[0].setDone(false);
-  stripData[0].setSynced(true);
-
-}
-
-bool syncDown() {
-  if (sslClient.connect(backend, 443)) {
-    Serial.println("connected to server");
-
-    DynamicJsonDocument requestDoc(32);
-  
-    DynamicJsonDocument responseDoc(128);
-
-    for(int i=0; i<PIXEL_COUNT; i++) {
-      
-      requestDoc["startDate"] = String(stripData[0].getDate()).c_str();
-      requestDoc["count"] = i;
-      
-      char body[64];
-      serializeJson(requestDoc, body);
-      size_t bodyLength = strlen(body);
-
-      sslClient.println("GET /habit/meditation HTTP/1.1");
-      sslClient.print("Host: ");
-      sslClient.println(backend);
-      sslClient.println("Content-type: application/json");
-      sslClient.println("Accept: */*");
-      sslClient.println("Cache-Control: no-cache");
-      sslClient.println("Accept-Encoding: gzip, deflate");
-      sslClient.print("Content-Length: ");
-      sslClient.println(bodyLength);
-      sslClient.println();
-      sslClient.println(body);
-
-      // Catch empty lines
-      while(sslClient.available()) {
-        Serial.write(sslClient.read());
-      }
-
-      // Check HTTP status
-      char status[32] = {0};
-      sslClient.readBytesUntil('\r', status, sizeof(status));
-      Serial.println(status);
-      // It should be "HTTP/1.0 200 OK" or "HTTP/1.1 200 CREATED"
-      if ( strcmp(status + 9, "200 OK") != 0 && strcmp(status + 9, "201 CREATED") != 0 ) 
-      {
-        Serial.print(F("Unexpected response: "));
-        Serial.println(status);
-        return false;
-      }
-  
-      // Skip HTTP headers
-      char endOfHeaders[] = "\r\n\r\n";
-      if (!sslClient.find(endOfHeaders)) 
-      {
-        Serial.println(F("Invalid response"));
-        return false;
-      }
-      
-      DeserializationError error = deserializeJson(responseDoc, sslClient);
-      if (error) {
-        Serial.print(F("deserializeJson() failed: "));
-        Serial.println(error.c_str());
-        return false;
-      }
-
-      const char* date = responseDoc["history"][0]["date"];
-      int done = responseDoc["history"][0]["done"];
-
-      stripData[i].setDate(date);
-      if (done == 1) {
-        stripData[i].setDone(true);
-      } else {
-        stripData[i].setDone(false);
-      }
-      stripData[i].setSynced(true);
-    }
-
-    // Close connection
-    sslClient.println("Connection: close");
-    sslClient.println();
-
-    // Catch remaining output
-    while(sslClient.available()) {
-      Serial.write(sslClient.read());
-    }
-
-    // Disconnect client
-    if (sslClient.connected()) {
-      sslClient.stop();
-    }
-
-    return true;
-  }
-}
-
-bool syncUp() {
-  Serial.println("Sync Up ..");
-  Serial.print("Free memory: ");
-  Serial.println(freeMemory());
-
-  if (sslClient.connect(backend, 443)) {
-    Serial.println("connected to server");
-    int successCount = 0;
-
-    DynamicJsonDocument requestDoc(48);
-    DynamicJsonDocument responseDoc(32);
-
-    for(int i=0; i<PIXEL_COUNT; i++) {
-
-      if(! stripData[i].isSynced()) {
-
-        successCount += 1;
-
-        Serial.println("Date: ");
-        Serial.println(stripData[i].getDate());
-        
-        requestDoc["dates"][0]["date"] = String(stripData[i].getDate()).c_str();
-        
-        char body[96];
-        serializeJson(requestDoc, body);
-        size_t bodyLength = strlen(body);
-        
-        Serial.println(body);
-
-        if(stripData[i].isDone()) {
-          sslClient.print("POST");
-        } else {
-          sslClient.print("DELETE");
-        }
-
-        sslClient.println(" /habit/meditation HTTP/1.1");
-        sslClient.print("Host: ");
-        sslClient.println(backend);
-        sslClient.println("Content-type: application/json");
-        sslClient.println("Accept: */*");
-        sslClient.println("Cache-Control: no-cache");
-        sslClient.println("Accept-Encoding: gzip, deflate");
-        sslClient.print("Content-Length: ");
-        sslClient.println(bodyLength);
-        sslClient.println();
-        sslClient.println(body);
-  
-        // Catch empty lines
-        while(sslClient.available()) {
-          Serial.write(sslClient.read());
-        }
-  
-        // Check HTTP status
-        char status[32] = {0};
-        sslClient.readBytesUntil('\r', status, sizeof(status));
-        Serial.println(status);
-        // It should be "HTTP/1.0 200 OK" or "HTTP/1.1 200 CREATED"
-        if ( strcmp(status + 9, "200 OK") != 0 && strcmp(status + 9, "201 CREATED") != 0 ) 
-        {
-          Serial.print(F("Unexpected response: "));
-          Serial.println(status);
-          return false;
-        }
-    
-        // Skip HTTP headers
-        char endOfHeaders[] = "\r\n\r\n";
-        if (!sslClient.find(endOfHeaders)) 
-        {
-          Serial.println(F("Invalid response"));
-          return false;
-        }
-        
-        DeserializationError error = deserializeJson(responseDoc, sslClient);
-        if (error) {
-          Serial.print(F("deserializeJson() failed: "));
-          Serial.println(error.c_str());
-          return false;
-        }
-
-        if(stripData[i].isDone()) {
-          if (responseDoc["added"] >= 0 ) {
-            Serial.print("Server successfully added dates to backend.");
-            stripData[i].setSynced(true);
-            setPixelDone(i);
-            strip.show();
-            successCount -= 1;
-          }
-        } else {
-          if (responseDoc["deleted"] >= 0 ) {
-            Serial.print("Server successfully deleted dates from backend.");
-            stripData[i].setSynced(true);
-            setPixelUndone(i);
-            strip.show();
-            successCount -= 1;
-          }
-        }
-      }
-    }
-
-    // Close connection
-    sslClient.println("Connection: close");
-    sslClient.println();
-
-    // Catch remaining output
-    while(sslClient.available()) {
-      Serial.write(sslClient.read());
-    }
-
-    // Disconnect client
-    if (sslClient.connected()) {
-      sslClient.stop();
-    }
-
-    return (successCount == 0);
-  }
-
-  Serial.println("Failed to connect to server");
-  
-  return false;
-}
-
-void visualizeDoneHistory() {
-  for (int i=0; i<PIXEL_COUNT; i++) {
-    if ( i == 0 && ! stripData[i].isDone()) {
-      setPixelTodo(i);
-    } else if (! stripData[i].isSynced() ) {
-      setPixelPending(i);
-    } else if ( stripData[i].isDone() ){
-      setPixelDone(i);
-    } else {
-      setPixelUndone(i);
-    }
-  }
-  strip.show();
-}
-
-// when button is pressed, update latest day in history and mark for sync
-void buttonPress() {
-  
-  stripData[0].setDate(myTimezone.dateTime(It::MYISO8601));
-  stripData[0].setDone(! stripData[0].isDone());
-  stripData[0].setSynced(false);
-
-  // sync pending -> green
-  setPixelPending(0);
-  strip.show();
-
-  delay(1000);
-  syncUp();
-}
-
-int translatePixelLocation(int index) {
-  // fill pixel ring backwards except for current day, which is on first pixel (0).
-  // 0 ->  0
-  // 1 -> 59
-  // 2 -> 58
-  // 3 -> 57
-  
-  int pixelIndex = 0;
-
-  int arrayIndex = index % PIXEL_COUNT;
-  if (arrayIndex != 0) {
-    pixelIndex = PIXEL_COUNT - arrayIndex;
-  }
-
-  return pixelIndex;
-}
-
-void setPixelPending(int arrayIndex) {
-  int pixelIndex = translatePixelLocation(arrayIndex);
-
-  if( switchOn) {
-    strip.setPixelColor(pixelIndex, strip.Color(  127, 127,   0));  // yellow
-  } else {
-    strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
-  }
-}
-
-void setPixelDone(int arrayIndex) {
-  int pixelIndex = translatePixelLocation(arrayIndex);
-  
-  if( switchOn) {
-    float green = (float)pixelIndex / PIXEL_COUNT * 70.0 + 7.0;
-    float blue = (float)pixelIndex / PIXEL_COUNT * 127.0 + 12.7;
-    
-    if ( pixelIndex == 0 ) {
-      green = 70.0;
-      blue = 127.0;
-    }
-
-    strip.setPixelColor(pixelIndex, strip.Color(  0, ceil(green),   ceil(blue)));  // blueish
-  } else {
-    strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
-  }
-}
-
-void setPixelUndone(int arrayIndex) {
-  int pixelIndex = translatePixelLocation(arrayIndex);
-  
-  if( switchOn) {
-    strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
-  } else {
-    strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
-  }
-}
-
-void setPixelTodo(int arrayIndex) {
-  int pixelIndex = translatePixelLocation(arrayIndex);
-  
-  if( switchOn) {
-    strip.setPixelColor(pixelIndex, strip.Color(  230, 40,   0));  // redish
-  } else {
-    strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
-  }
-}
-
-void setPixelLoading(int arrayIndex) {    
-  int pixelIndex = translatePixelLocation(arrayIndex);
-  
-  if( switchOn) {
-    strip.setPixelColor(pixelIndex, strip.Color(  127, 0,   0));  // red
-  } else {
-    strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
-  }
-}
-
 void initLog() {
   Serial.begin(9600);
-  if(false) {
+  if(true) {
     while (!Serial) {
       ; // wait for serial port to connect. Needed for native USB port only
     }
   }
   Serial.println("Hello Serial");
-}
-
-void initPixels() {
-  strip.begin(); // Initialize NeoPixel strip object (REQUIRED)
-
-  // strip.setPixelColor(0, strip.Color(  127, 0,   0));  //  Set pixel's color (in RAM)
-  strip.setBrightness(BRIGHTNESS); // Set BRIGHTNESS (max = 255)
-
-  strip.show();  // Initialize all pixels to [0]-red
 }
 
 void checkWifiModule() {
@@ -604,60 +216,18 @@ void checkWifiFirmware() {
   }
 }
 
-void testBackend(const char *logmessage) {
-  // connect
-  Serial.print("\nStarting connection to server ");
-  Serial.println(logmessage);
-
-  // TODO: remove these two lines
-  ArduinoBearSSL.onGetTime(getTimeBearSSL);
-  sslClient.setEccSlot(0, certificate);
-  
-  // if you get a connection, report back via serial:
-  if (sslClient.connect(backend, 443)) {
-    Serial.println("connected to server");
-    // Make a HTTP request:
-    sslClient.println("GET /habits HTTP/1.1");
-    sslClient.print("Host: ");
-    sslClient.println(backend);
-    sslClient.println("Connection: close");
-    sslClient.println();
-  } else {
-    Serial.println("Failed to connect.");
-    sslClient.stop();
-  }
-  
-  Serial.print("available: ");
-  Serial.println(sslClient.available());
-  Serial.print("connected: ");
-  Serial.println(sslClient.connected());
-
-  while(sslClient.connected()) {
-    if(sslClient.available()) {
-      while(sslClient.available()) {
-        Serial.write(sslClient.read());
-      }
-      sslClient.stop();
-      break;
-    }
-  }
-}
-
 // Block loop while time is not set
 void waitForTimeSync() {
   if (timeStatus() == timeSet && WiFi.getTime() > 0) {
     return;
   }
-  
-  // run a red pixel around the ring
-  int loadingPixel = 0;
 
+  Serial.print("Free memory: ");
+  Serial.println(Strip::freeMemory());
+  
   while (WiFi.getTime() <= 0 ) {
     Serial.println("Waiting for wifi time");
-    setPixelLoading(loadingPixel);
-    setPixelUndone(loadingPixel -1);
-    loadingPixel += 1;
-    strip.show();
+    strip.advanceLoadingAnimation();
     delay(500);
   }
 
@@ -676,24 +246,22 @@ void waitForTimeSync() {
         break;
       }
     }
-    setPixelLoading(loadingPixel);
-    setPixelUndone(loadingPixel -1);
-    loadingPixel += 1;
-    strip.show();
+    strip.advanceLoadingAnimation();
     delay(5000);
   }
+
+  Serial.print("Free memory: ");
+  Serial.println(Strip::freeMemory());
+
+  strip.newDay(myTimezone.dateTime(It::MYISO8601));
+
+  Serial.print("Free memory: ");
+  Serial.println(Strip::freeMemory());
 
   // ezTime events setup
   deleteEvent( fullSync );
   deleteEvent( everyDay );
-  // setEvent( fullSync, nextFiveMinutes() );
   setEvent( everyDay, nextDay() );
-
-  // init today
-  stripData[0].setDate(myTimezone.dateTime(It::MYISO8601));
-  stripData[0].setDone(false);
-  stripData[0].setSynced(true);
-
   fullSync();
 }
 
@@ -729,28 +297,4 @@ void printWifiStatus() {
   long rssi = WiFi.RSSI();
   Serial.print("signal strength (RSSI) in dBm:");
   Serial.println(rssi);
-}
-
-// Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
-void rainbow(int wait) {
-  // Hue of first pixel runs 3 complete loops through the color wheel.
-  // Color wheel has a range of 65536 but it's OK if we roll over, so
-  // just count from 0 to 3*65536. Adding 256 to firstPixelHue each time
-  // means we'll make 3*65536/256 = 768 passes through this outer loop:
-  for(long firstPixelHue = 0; firstPixelHue < 3*65536; firstPixelHue += 256) {
-    for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
-      // Offset pixel hue by an amount to make one full revolution of the
-      // color wheel (range of 65536) along the length of the strip
-      // (strip.numPixels() steps):
-      int pixelHue = firstPixelHue + (i * 65536L / strip.numPixels());
-      // strip.ColorHSV() can take 1 or 3 arguments: a hue (0 to 65535) or
-      // optionally add saturation and value (brightness) (each 0 to 255).
-      // Here we're using just the single-argument hue variant. The result
-      // is passed through strip.gamma32() to provide 'truer' colors
-      // before assigning to each pixel:
-      strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(pixelHue)));
-    }
-    strip.show(); // Update strip with new contents
-    delay(wait);  // Pause for a moment
-  }
 }
