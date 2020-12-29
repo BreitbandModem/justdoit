@@ -5,24 +5,6 @@
 #include <ArduinoJson.h>
 #include <math.h>
 
-#ifdef __arm__
-// should use uinstd.h to define sbrk but Due causes a conflict
-extern "C" char* sbrk(int incr);
-#else  // __ARM__
-extern char *__brkval;
-#endif  // __arm__
- 
-int Strip::freeMemory() {
-  char top;
-#ifdef __arm__
-  return &top - reinterpret_cast<char*>(sbrk(0));
-#elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
-  return &top - __brkval;
-#else  // __arm__
-  return __brkval ? &top - __brkval : &top - __malloc_heap_start;
-#endif  // __arm__
-}
-
 Strip::Strip(int _pixelCount, int pixelPin, int brightness) 
     : pixelCount(_pixelCount),
       loadingAnimationPixel{0},
@@ -44,7 +26,7 @@ void Strip::show() {
     strip.show();
 }
 
-void Strip::done(int index, String date, const char* backend, BearSSLClient* sslClient) {
+void Strip::done(int index, String date, NetworkHelper* networkHelper) {
     data[index].setDate(date);
     data[index].setDone(! data[index].isDone());
     data[index].setSynced(false);
@@ -53,14 +35,12 @@ void Strip::done(int index, String date, const char* backend, BearSSLClient* ssl
     setPixelPending(index);
     strip.show();
 
-    syncUp(backend, sslClient);
+    syncUp(networkHelper);
 }
 
 void Strip::newDay(String date) {
     // Free memory of it that falls of the table!
     data[pixelCount - 1].destroy();
-    Serial.print("Free memory: ");
-    Serial.println(freeMemory());
 
     // Shift all pixels to the 'right' (last pixel will be dropped)
     for (int i=pixelCount-1; i>0; i--) {
@@ -170,19 +150,34 @@ void Strip::advanceLoadingAnimation() {
     strip.show();
 }
 
-void Strip::sync(const char* backend, BearSSLClient* sslClient) {
-    bool syncedUp = syncUp(backend, sslClient);
+void Strip::sync(NetworkHelper* networkHelper) {
+    bool syncedUp = syncUp(networkHelper);
 
     if(syncedUp) {
-        syncDown(backend, sslClient);
+        syncDown(networkHelper);
         visualize();
     }
 }
 
-bool Strip::syncUp(const char* backend, BearSSLClient* sslClient) {
-    Serial.println("Sync Up ..");
+// bool Strip::syncUp(NetworkHelper* networkHelper) {
 
-    if (sslClient->connect(backend, 443)) {
+// }
+
+// bool Strip::syncDown(NetworkHelper* networkHelper) {
+
+// }
+
+bool Strip::syncUp(NetworkHelper* networkHelper) {
+    ArduinoBearSSL.onGetTime(&NetworkHelper::getTimeCallback);
+    Serial.println("Sync Up ..");
+    BearSSLClient NetworkHelper::*cli = &NetworkHelper::sslClient;
+    BearSSLClient* sslClient = &(networkHelper->*cli);
+    // BearSSLClient* sslClient = networkHelper->getClient();
+
+    Serial.print("Connecting to ");
+    Serial.println(networkHelper->backend);
+
+    if (sslClient->connect(networkHelper->backend, 443)) {
         Serial.println("connected to server");
         int successCount = 0;
 
@@ -198,7 +193,7 @@ bool Strip::syncUp(const char* backend, BearSSLClient* sslClient) {
             Serial.println("Date: ");
             Serial.println(data[i].getDate());
             
-            requestDoc["dates"][0]["date"] = String(data[i].getDate()).c_str();
+            requestDoc["dates"][0]["date"] = data[i].getDate();
             
             char body[96];
             serializeJson(requestDoc, body);
@@ -214,7 +209,7 @@ bool Strip::syncUp(const char* backend, BearSSLClient* sslClient) {
 
             sslClient->println(" /habit/meditation HTTP/1.1");
             sslClient->print("Host: ");
-            sslClient->println(backend);
+            sslClient->println(networkHelper->backend);
             sslClient->println("Content-type: application/json");
             sslClient->println("Accept: */*");
             sslClient->println("Cache-Control: no-cache");
@@ -298,8 +293,11 @@ bool Strip::syncUp(const char* backend, BearSSLClient* sslClient) {
     return false;
 }
 
-bool Strip::syncDown(const char* backend, BearSSLClient* sslClient) {
-    if (sslClient->connect(backend, 443)) {
+bool Strip::syncDown(NetworkHelper* networkHelper) {
+    ArduinoBearSSL.onGetTime(&NetworkHelper::getTimeCallback);
+    BearSSLClient NetworkHelper::*cli = &NetworkHelper::sslClient;
+    BearSSLClient* sslClient = &(networkHelper->*cli);
+    if (sslClient->connect(networkHelper->backend, 443)) {
         Serial.println("connected to server");
 
         DynamicJsonDocument requestDoc(32);
@@ -308,16 +306,18 @@ bool Strip::syncDown(const char* backend, BearSSLClient* sslClient) {
 
         for(int i=0; i<pixelCount; i++) {
         
-        requestDoc["startDate"] = String(data[0].getDate()).c_str();
+        Serial.println(data[0].getDate());
+        requestDoc["startDate"] = data[0].getDate();
         requestDoc["count"] = i;
         
         char body[64];
         serializeJson(requestDoc, body);
         size_t bodyLength = strlen(body);
+        Serial.println(body);
 
         sslClient->println("GET /habit/meditation HTTP/1.1");
         sslClient->print("Host: ");
-        sslClient->println(backend);
+        sslClient->println(networkHelper->backend);
         sslClient->println("Content-type: application/json");
         sslClient->println("Accept: */*");
         sslClient->println("Cache-Control: no-cache");

@@ -10,7 +10,7 @@ It::It() {
     synced = true;
 }
 
-char* It::getDate() {
+const char* It::getDate() {
     return date;
 }
 void It::setDate(char* d) {

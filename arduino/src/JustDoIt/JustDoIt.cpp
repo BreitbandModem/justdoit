@@ -5,12 +5,12 @@
 
 #include <Wire.h>
 #include <SPI.h>
-#include <WiFiNINA.h>
-// #include <ArduinoJson.h>
 #include <ezTime.h>
-// #include <Adafruit_NeoPixel.h>
+#include <WiFiNINA.h>
 #include <ArduinoBearSSL.h>
 #include <ArduinoECCX08.h>
+
+#include <NetworkHelper.h>
 
 const byte BUTTON_PIN  = 2;
 const byte PIR_PIN     = 3;
@@ -20,22 +20,13 @@ const int  PIXEL_COUNT = 60;  // Number of NeoPixels
 const int  BRIGHTNESS  = 10;
 
 // Supply backend address and certificate via secrets file
-// Wifi variables
-char ssid[] = SECRET_SSID;
-char pass[] = SECRET_PASS;
-const char* certificate = CERTIFICATE;
-const char backend[] = BACKEND_ADDRESS;
-int wifiStatus = WL_IDLE_STATUS;
+NetworkHelper networkHelper(SECRET_SSID, SECRET_PASS, BACKEND_ADDRESS, CERTIFICATE);
 
 // Timing variables
 Timezone myTimezone;
 
 // Pixel variables
 Strip strip(PIXEL_COUNT, PIXEL_PIN, BRIGHTNESS);
-
-// Initialize the Wifi client library
-WiFiClient client;
-BearSSLClient sslClient(client);
 
 // Control flow variables
 int currentButtonState;       // the actual current button state after debouncing
@@ -45,34 +36,18 @@ unsigned long debounceDelay = 50;    // the debounce time; increase if the outpu
 
 unsigned long lastPirTime = 0;  // the last time the PIR sensor was triggered by movement
 unsigned long pirDelay = 30000;  // Turn on LEDs for this long after PIR Sensor was triggered
-bool switchOn = true;  // whether to turn on or off the LEDs
-
-unsigned long lastWifiConnectTime = 0;  // the last time we tried to connect to wifi
-unsigned long wifiConnectDelay = 10000;  // wait this long before trying to reconnect to wifi
-
-// struct PixelData pixelHistory[PIXEL_COUNT];
-// It stripData[PIXEL_COUNT];
 
 /*
 * Function prototypes
 */
 void setup(void);
 void loop(void);
-unsigned long getTimeBearSSL();
 void everyDay();
 void fullSync();
 time_t nextFiveMinutes();
 time_t nextDay();
 void initLog();
-void checkWifiModule();
-void checkWifiFirmware();
-void waitForTimeSync();
-void connectWifi();
-void printWifiStatus();
-
-unsigned long getTimeBearSSL() {
-  return WiFi.getTime();
-}
+void requireLoop();
 
 void setup() {
   initLog();
@@ -80,25 +55,20 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);  // init button
   pinMode(PIR_PIN, INPUT);  // init PIR motion sensor
   
-  checkWifiModule();
-  checkWifiFirmware();
-  
-  sslClient.setEccSlot(0, certificate);
+  networkHelper.checkWifiModule();
+  networkHelper.checkWifiFirmware();
 
   // ezTime
   setDebug(INFO);
   Serial.print("Free memory: ");
-  Serial.println(Strip::freeMemory());
+  Serial.println(NetworkHelper::freeMemory());
 }
 
 void loop() {
   strip.visualize();
 
-  // if not connected wifi, try to reconnect
-  connectWifi();
-
   // while no time is available, this method will try to reconnect to NTP
-  waitForTimeSync();
+  requireLoop();
 
   // ezTime event trigger
   events();
@@ -106,11 +76,11 @@ void loop() {
   int readPir = digitalRead(PIR_PIN);
   if (readPir == HIGH) {
     lastPirTime = millis();
-    switchOn = true;
+    strip.setAwake(true);
   }
 
   if ((millis() - lastPirTime) > pirDelay) {
-    switchOn = false;
+    strip.setAwake(false);
   }
 
   int readButton = digitalRead(BUTTON_PIN);
@@ -129,7 +99,7 @@ void loop() {
       // Button has been pressed
       if (currentButtonState == LOW) {
         Serial.println("Button pressed.");
-        strip.done(0, myTimezone.dateTime(It::MYISO8601), backend, &sslClient);
+        strip.done(0, myTimezone.dateTime(It::MYISO8601), &networkHelper);
       }
     }
   }
@@ -153,9 +123,9 @@ void fullSync() {
   Serial.println("Syncing to backend...");
 
   Serial.print("Free memory: ");
-  Serial.println(Strip::freeMemory());
+  Serial.println(NetworkHelper::freeMemory());
 
-  strip.sync(backend, &sslClient);
+  strip.sync(&networkHelper);
 
   // register next event
   setEvent( fullSync, nextFiveMinutes() );
@@ -201,100 +171,45 @@ void initLog() {
   Serial.println("Hello Serial");
 }
 
-void checkWifiModule() {
-  if (WiFi.status() == WL_NO_MODULE) {
-    Serial.println("Communication with WiFi module failed!");
-    // don't continue
-    while (true);
-  }
-}
-
-void checkWifiFirmware() {
-  String fv = WiFi.firmwareVersion();
-  if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
-    Serial.println("Please upgrade the firmware");
-  }
-}
-
-// Block loop while time is not set
-void waitForTimeSync() {
-  if (timeStatus() == timeSet && WiFi.getTime() > 0) {
-    return;
+void requireLoop() {
+  bool requirementMissing = false;
+  // wait for wifi connection
+  while(! networkHelper.isWifiConnected()) {
+    requirementMissing = true;
+    strip.advanceLoadingAnimation();
+    networkHelper.connectWifi();
+    delay(5000);
   }
 
-  Serial.print("Free memory: ");
-  Serial.println(Strip::freeMemory());
-  
-  while (WiFi.getTime() <= 0 ) {
-    Serial.println("Waiting for wifi time");
+  // wait for wifi time 
+  while(! networkHelper.isWifiTimeAvailable()) {
+    requirementMissing = true;
     strip.advanceLoadingAnimation();
     delay(500);
   }
 
-  ArduinoBearSSL.onGetTime(getTimeBearSSL);
-  
-  while (timeStatus() == timeNotSet) {
-    if (wifiStatus != WL_CONNECTED) {
-      wifiStatus = WiFi.begin(ssid, pass);
-    } else {
-      waitForSync(10);
-      myTimezone.setLocation(F("de"));
-  
-      // if ez time eventually synced
-      // then setup events and sync with backend
-      if(timeStatus() == timeSet) {
-        break;
-      }
-    }
+  // wait for eztime sync
+  while (timeStatus() != timeSet) {
+    requirementMissing = true;
     strip.advanceLoadingAnimation();
+    waitForSync(10);
+    myTimezone.setLocation(F("de"));
     delay(5000);
   }
 
-  Serial.print("Free memory: ");
-  Serial.println(Strip::freeMemory());
+  if (requirementMissing) {
+    // Verify backend
+    Serial.print("Free memory: ");
+    Serial.println(NetworkHelper::freeMemory());
+    // networkHelper.testBackend("test backend #1");
 
-  strip.newDay(myTimezone.dateTime(It::MYISO8601));
+    // init sync and events
+    strip.newDay(myTimezone.dateTime(It::MYISO8601));
 
-  Serial.print("Free memory: ");
-  Serial.println(Strip::freeMemory());
-
-  // ezTime events setup
-  deleteEvent( fullSync );
-  deleteEvent( everyDay );
-  setEvent( everyDay, nextDay() );
-  fullSync();
-}
-
-void connectWifi() {
-  if ( (millis() - wifiConnectDelay) > lastWifiConnectTime) {
-    wifiStatus = WiFi.status();
-    lastWifiConnectTime = millis();
-    
-    if(wifiStatus != WL_CONNECTED) {
-      Serial.println("Not connected to Wifi. Attempting to connect...");
-  
-      wifiStatus = WiFi.begin(ssid, pass);
-  
-      if (wifiStatus == WL_CONNECTED) {
-        Serial.println("Successfully connected to wifi");
-        printWifiStatus();
-      }
-    }
+    // ezTime events setup
+    deleteEvent( fullSync );
+    deleteEvent( everyDay );
+    setEvent( everyDay, nextDay() );
+    fullSync();
   }
-}
-
-void printWifiStatus() {
-  // print the SSID of the network you're attached to:
-  Serial.print("SSID: ");
-  Serial.println(WiFi.SSID());
-
-  // print your board's IP address:
-  IPAddress ip = WiFi.localIP();
-  Serial.print("IP Address: ");
-  Serial.println(ip);
-
-  // print the received signal strength:
-  long rssi = WiFi.RSSI();
-  Serial.print("signal strength (RSSI) in dBm:");
-  Serial.println(rssi);
 }

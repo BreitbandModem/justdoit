@@ -9,7 +9,7 @@ public:
 
   static const char MYISO8601[];
 
-  char* getDate();
+  const char* getDate();
   void setDate(char* d);
   void setDate(String d);
 
