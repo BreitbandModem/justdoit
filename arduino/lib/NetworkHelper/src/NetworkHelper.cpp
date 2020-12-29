@@ -1,16 +1,15 @@
 #include "NetworkHelper.h"
 
-NetworkHelper::NetworkHelper(const char* _ssid, const char* _pass, const char* _backend, const char* _certificate)
-    : lastWifiConnectTime{0},
-      wifiConnectDelay{5000},
-      ssid(_ssid),
-      pass(_pass),
-      backend(_backend),
+NetworkHelper::NetworkHelper(const char* _backend, const char* _certificate)
+    : backend(_backend),
       certificate(_certificate),
       client(),
       sslClient(client) {
         sslClient.setEccSlot(0, certificate);
 }
+
+unsigned long NetworkHelper::lastWifiConnectTime = 0;
+unsigned long NetworkHelper::wifiConnectDelay = 10000;
 
 #ifdef __arm__
 // should use uinstd.h to define sbrk but Due causes a conflict
@@ -40,21 +39,21 @@ BearSSLClient* NetworkHelper::getClient() {
     return &sslClient;
 }
 
-bool NetworkHelper::isWifiConnected() {
+static bool NetworkHelper::isWifiConnected() {
     if (WiFi.status() == WL_CONNECTED) {
         return true;
     }
     return false;
 }
 
-bool NetworkHelper::isWifiTimeAvailable() {
+static bool NetworkHelper::isWifiTimeAvailable() {
     if (WiFi.getTime() > 0 ) {
         return true;
     }
     return false;
 }
 
-void NetworkHelper::connectWifi() {
+static void NetworkHelper::connectWifi(const char* ssid, const char* pass) {
     if ( (millis() - wifiConnectDelay) > lastWifiConnectTime) {
         int wifiStatus = WiFi.status();
         lastWifiConnectTime = millis();
@@ -72,14 +71,14 @@ void NetworkHelper::connectWifi() {
     }
 }
 
-void NetworkHelper::checkWifiFirmware() {
+static void NetworkHelper::checkWifiFirmware() {
     String fv = WiFi.firmwareVersion();
     if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
         Serial.println("Please upgrade the firmware");
     }
 }
 
-void NetworkHelper::checkWifiModule() {
+static void NetworkHelper::checkWifiModule() {
     if (WiFi.status() == WL_NO_MODULE) {
         Serial.println("Communication with WiFi module failed!");
         // don't continue
@@ -87,7 +86,7 @@ void NetworkHelper::checkWifiModule() {
     }
 }
 
-void NetworkHelper::printWifiStatus() {
+static void NetworkHelper::printWifiStatus() {
     // print the SSID of the network you're attached to:
     Serial.print("SSID: ");
     Serial.println(WiFi.SSID());

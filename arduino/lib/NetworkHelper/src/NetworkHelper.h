@@ -7,9 +7,16 @@
 
 class NetworkHelper {
     public:
-        NetworkHelper(const char*, const char*, const char*, const char*);
+        NetworkHelper(const char*, const char*);
 
+        static int freeMemory();
         static unsigned long getTimeCallback();
+        static bool isWifiConnected();
+        static bool isWifiTimeAvailable();
+        static void connectWifi(const char*, const char*);
+        static void printWifiStatus();
+        static void checkWifiModule();
+        static void checkWifiFirmware();
 
         WiFiClient client;
         BearSSLClient sslClient; 
@@ -17,22 +24,14 @@ class NetworkHelper {
         const char* certificate;
 
         BearSSLClient* getClient();
-        bool isWifiConnected();
-        bool isWifiTimeAvailable();
-        void connectWifi();
-        void printWifiStatus();
-        void checkWifiModule();
-        void checkWifiFirmware();
         void testBackend(const char*);
-        
-        static int freeMemory();
 
     private:
-        const char* ssid;
-        const char* pass;
-
-        unsigned long lastWifiConnectTime = 0;  // the last time we tried to connect to wifi
-        unsigned long wifiConnectDelay = 10000;  // wait this long before trying to reconnect to wifi
+        static unsigned long lastWifiConnectTime;  // the last time we tried to connect to wifi
+        static unsigned long wifiConnectDelay;  // wait this long before trying to reconnect to wifi
+        
+        static const char* ssid;
+        static const char* pass;
 };
 
 #endif

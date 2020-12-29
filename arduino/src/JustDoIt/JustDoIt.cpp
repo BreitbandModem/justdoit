@@ -20,7 +20,7 @@ const int  PIXEL_COUNT = 60;  // Number of NeoPixels
 const int  BRIGHTNESS  = 10;
 
 // Supply backend address and certificate via secrets file
-NetworkHelper networkHelper(SECRET_SSID, SECRET_PASS, BACKEND_ADDRESS, CERTIFICATE);
+NetworkHelper networkHelper(BACKEND_ADDRESS, CERTIFICATE);
 
 // Timing variables
 Timezone myTimezone;
@@ -55,8 +55,8 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);  // init button
   pinMode(PIR_PIN, INPUT);  // init PIR motion sensor
   
-  networkHelper.checkWifiModule();
-  networkHelper.checkWifiFirmware();
+  NetworkHelper::checkWifiModule();
+  NetworkHelper::checkWifiFirmware();
 
   // ezTime
   setDebug(INFO);
@@ -174,15 +174,15 @@ void initLog() {
 void requireLoop() {
   bool requirementMissing = false;
   // wait for wifi connection
-  while(! networkHelper.isWifiConnected()) {
+  while(! NetworkHelper::isWifiConnected()) {
     requirementMissing = true;
     strip.advanceLoadingAnimation();
-    networkHelper.connectWifi();
+    NetworkHelper::connectWifi(SECRET_SSID, SECRET_PASS);
     delay(5000);
   }
 
   // wait for wifi time 
-  while(! networkHelper.isWifiTimeAvailable()) {
+  while(! NetworkHelper::isWifiTimeAvailable()) {
     requirementMissing = true;
     strip.advanceLoadingAnimation();
     delay(500);
