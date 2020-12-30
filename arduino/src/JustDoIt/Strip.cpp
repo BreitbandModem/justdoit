@@ -16,6 +16,9 @@ Strip::Strip(int _pixelCount, int pixelPin, int brightness)
         strip.show();
 
         data = new It[pixelCount];
+        for(int i=0; i<pixelCount; i++) {
+          data[i].setIndex(i); 
+        }
 }
 
 void Strip::setAwake(bool a) {
@@ -35,7 +38,10 @@ void Strip::done(int index, String date, NetworkHelper* networkHelper) {
     setPixelPending(index);
     strip.show();
 
-    syncUp(networkHelper);
+    if(networkHelper->connectBackend()) {
+      data[index].postIt(networkHelper);
+      networkHelper->disconnectBackend();
+    }
 }
 
 void Strip::newDay(String date) {
@@ -45,6 +51,7 @@ void Strip::newDay(String date) {
     // Shift all pixels to the 'right' (last pixel will be dropped)
     for (int i=pixelCount-1; i>0; i--) {
         data[i] = data[i-1];
+        data[i].setIndex(i);
     }
 
     // Set todays pixel
@@ -151,240 +158,19 @@ void Strip::advanceLoadingAnimation() {
 }
 
 void Strip::sync(NetworkHelper* networkHelper) {
-    bool syncedUp = syncUp(networkHelper);
+    Serial.println("Sync");
+    Serial.print("Free memory: ");
+    Serial.println(NetworkHelper::freeMemory());
 
-    if(syncedUp) {
-        syncDown(networkHelper);
-        visualize();
-    }
-}
-
-// bool Strip::syncUp(NetworkHelper* networkHelper) {
-
-// }
-
-// bool Strip::syncDown(NetworkHelper* networkHelper) {
-
-// }
-
-bool Strip::syncUp(NetworkHelper* networkHelper) {
-    ArduinoBearSSL.onGetTime(&NetworkHelper::getTimeCallback);
-    Serial.println("Sync Up ..");
-    BearSSLClient NetworkHelper::*cli = &NetworkHelper::sslClient;
-    BearSSLClient* sslClient = &(networkHelper->*cli);
-    // BearSSLClient* sslClient = networkHelper->getClient();
-
-    Serial.print("Connecting to ");
-    Serial.println(networkHelper->backend);
-
-    if (sslClient->connect(networkHelper->backend, 443)) {
-        Serial.println("connected to server");
-        int successCount = 0;
-
-        DynamicJsonDocument requestDoc(48);
-        DynamicJsonDocument responseDoc(32);
-
-        for(int i=0; i<pixelCount; i++) {
-
-        if(! data[i].isSynced()) {
-
-            successCount += 1;
-
-            Serial.println("Date: ");
-            Serial.println(data[i].getDate());
-            
-            requestDoc["dates"][0]["date"] = data[i].getDate();
-            
-            char body[96];
-            serializeJson(requestDoc, body);
-            size_t bodyLength = strlen(body);
-            
-            Serial.println(body);
-
-            if(data[i].isDone()) {
-            sslClient->print("POST");
-            } else {
-            sslClient->print("DELETE");
-            }
-
-            sslClient->println(" /habit/meditation HTTP/1.1");
-            sslClient->print("Host: ");
-            sslClient->println(networkHelper->backend);
-            sslClient->println("Content-type: application/json");
-            sslClient->println("Accept: */*");
-            sslClient->println("Cache-Control: no-cache");
-            sslClient->println("Accept-Encoding: gzip, deflate");
-            sslClient->print("Content-Length: ");
-            sslClient->println(bodyLength);
-            sslClient->println();
-            sslClient->println(body);
-    
-            // Catch empty lines
-            while(sslClient->available()) {
-            Serial.write(sslClient->read());
-            }
-    
-            // Check HTTP status
-            char status[32] = {0};
-            sslClient->readBytesUntil('\r', status, sizeof(status));
-            Serial.println(status);
-            // It should be "HTTP/1.0 200 OK" or "HTTP/1.1 200 CREATED"
-            if ( strcmp(status + 9, "200 OK") != 0 && strcmp(status + 9, "201 CREATED") != 0 ) 
-            {
-            Serial.print(F("Unexpected response: "));
-            Serial.println(status);
-            return false;
-            }
-        
-            // Skip HTTP headers
-            char endOfHeaders[] = "\r\n\r\n";
-            if (!sslClient->find(endOfHeaders)) 
-            {
-            Serial.println(F("Invalid response"));
-            return false;
-            }
-            
-            DeserializationError error = deserializeJson(responseDoc, *sslClient);
-            if (error) {
-            Serial.print(F("deserializeJson() failed: "));
-            Serial.println(error.c_str());
-            return false;
-            }
-
-            if(data[i].isDone()) {
-            if (responseDoc["added"] >= 0 ) {
-                Serial.print("Server successfully added dates to backend.");
-                data[i].setSynced(true);
-                setPixelDone(i);
-                strip.show();
-                successCount -= 1;
-            }
-            } else {
-            if (responseDoc["deleted"] >= 0 ) {
-                Serial.print("Server successfully deleted dates from backend.");
-                data[i].setSynced(true);
-                setPixelUndone(i);
-                strip.show();
-                successCount -= 1;
-            }
-            }
+    if(networkHelper->connectBackend()) {
+      for(int i=0; i<pixelCount; i++) {
+        if(data[i].postIt(networkHelper)) {
+          data[i].getIt(networkHelper);
         }
-        }
+      }
 
-        // Close connection
-        sslClient->println("Connection: close");
-        sslClient->println();
-
-        // Catch remaining output
-        while(sslClient->available()) {
-            Serial.write(sslClient->read());
-        }
-
-        // Disconnect client
-        if (sslClient->connected()) {
-            sslClient->stop();
-        }
-
-        return (successCount == 0);
+      networkHelper->disconnectBackend();
     }
 
-    Serial.println("Failed to connect to server");
-    
-    return false;
-}
-
-bool Strip::syncDown(NetworkHelper* networkHelper) {
-    ArduinoBearSSL.onGetTime(&NetworkHelper::getTimeCallback);
-    BearSSLClient NetworkHelper::*cli = &NetworkHelper::sslClient;
-    BearSSLClient* sslClient = &(networkHelper->*cli);
-    if (sslClient->connect(networkHelper->backend, 443)) {
-        Serial.println("connected to server");
-
-        DynamicJsonDocument requestDoc(32);
-    
-        DynamicJsonDocument responseDoc(128);
-
-        for(int i=0; i<pixelCount; i++) {
-        
-        Serial.println(data[0].getDate());
-        requestDoc["startDate"] = data[0].getDate();
-        requestDoc["count"] = i;
-        
-        char body[64];
-        serializeJson(requestDoc, body);
-        size_t bodyLength = strlen(body);
-        Serial.println(body);
-
-        sslClient->println("GET /habit/meditation HTTP/1.1");
-        sslClient->print("Host: ");
-        sslClient->println(networkHelper->backend);
-        sslClient->println("Content-type: application/json");
-        sslClient->println("Accept: */*");
-        sslClient->println("Cache-Control: no-cache");
-        sslClient->println("Accept-Encoding: gzip, deflate");
-        sslClient->print("Content-Length: ");
-        sslClient->println(bodyLength);
-        sslClient->println();
-        sslClient->println(body);
-
-        // Catch empty lines
-        while(sslClient->available()) {
-            Serial.write(sslClient->read());
-        }
-
-        // Check HTTP status
-        char status[32] = {0};
-        sslClient->readBytesUntil('\r', status, sizeof(status));
-        Serial.println(status);
-        // It should be "HTTP/1.0 200 OK" or "HTTP/1.1 200 CREATED"
-        if ( strcmp(status + 9, "200 OK") != 0 && strcmp(status + 9, "201 CREATED") != 0 ) 
-        {
-            Serial.print(F("Unexpected response: "));
-            Serial.println(status);
-            return false;
-        }
-    
-        // Skip HTTP headers
-        char endOfHeaders[] = "\r\n\r\n";
-        if (!sslClient->find(endOfHeaders)) 
-        {
-            Serial.println(F("Invalid response"));
-            return false;
-        }
-        
-        DeserializationError error = deserializeJson(responseDoc, *sslClient);
-        if (error) {
-            Serial.print(F("deserializeJson() failed: "));
-            Serial.println(error.c_str());
-            return false;
-        }
-
-        const char* date = responseDoc["history"][0]["date"];
-        int done = responseDoc["history"][0]["done"];
-
-        data[i].setDate(date);
-        if (done == 1) {
-            data[i].setDone(true);
-        } else {
-            data[i].setDone(false);
-        }
-        data[i].setSynced(true);
-        }
-
-        // Close connection
-        sslClient->println("Connection: close");
-        sslClient->println();
-
-        // Catch remaining output
-        while(sslClient->available()) {
-            Serial.write(sslClient->read());
-        }
-
-        // Disconnect client
-        if (sslClient->connected()) {
-            sslClient->stop();
-        }
-
-        return true;
-    }
+    visualize();
 }

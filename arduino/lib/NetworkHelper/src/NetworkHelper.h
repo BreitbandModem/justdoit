@@ -4,6 +4,7 @@
 #include <WiFiNINA.h>
 #include <ArduinoBearSSL.h>
 #include <ArduinoECCX08.h>
+#include <ArduinoJson.h>
 
 class NetworkHelper {
     public:
@@ -25,6 +26,11 @@ class NetworkHelper {
 
         BearSSLClient* getClient();
         void testBackend(const char*);
+        bool connectBackend();
+        bool getRequest(DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc);
+        bool postRequest(DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc);
+        bool deleteRequest(DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc);
+        void disconnectBackend();
 
     private:
         static unsigned long lastWifiConnectTime;  // the last time we tried to connect to wifi
@@ -32,6 +38,8 @@ class NetworkHelper {
         
         static const char* ssid;
         static const char* pass;
+
+        bool httpRequest(const char* method, DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc);
 };
 
 #endif

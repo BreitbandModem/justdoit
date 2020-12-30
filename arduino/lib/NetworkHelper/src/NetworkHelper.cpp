@@ -102,6 +102,106 @@ static void NetworkHelper::printWifiStatus() {
     Serial.println(rssi);
 }
 
+bool NetworkHelper::connectBackend() {
+    Serial.println("Connecting to Backend.");
+
+    ArduinoBearSSL.onGetTime(&NetworkHelper::getTimeCallback);
+    bool connected = sslClient.connect(backend, 443);
+
+    Serial.print("Connected: ");
+    Serial.println(connected);
+
+    return connected;
+}
+
+bool NetworkHelper::getRequest(DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc) {
+    return httpRequest("GET", requestDoc, responseDoc);
+}
+
+bool NetworkHelper::postRequest(DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc) {
+    return httpRequest("POST", requestDoc, responseDoc);
+}
+
+bool NetworkHelper::deleteRequest(DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc) {
+    return httpRequest("DELETE", requestDoc, responseDoc);
+}
+
+bool NetworkHelper::httpRequest(const char* method, DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc) {
+    if(sslClient.connected()) {
+        Serial.println("Submitting http request to backend.");
+
+        sslClient.print(method);
+        sslClient.println(" /habit/meditation HTTP/1.1");
+        sslClient.print("Host: ");
+        sslClient.println(backend);
+        sslClient.println("Content-type: application/json");
+        sslClient.println("Accept: */*");
+        sslClient.println("Cache-Control: no-cache");
+        sslClient.println("Accept-Encoding: gzip, deflate");
+        sslClient.print("Content-Length: ");
+        sslClient.println(measureJson(*requestDoc));
+
+        // Terminate header with blank line
+        sslClient.println();
+
+        // Send JSON document in body
+        serializeJson(*requestDoc, Serial);
+        serializeJson(*requestDoc, sslClient);
+
+        // Catch empty lines
+        while(sslClient.available()) {
+            Serial.write(sslClient.read());
+        }
+
+        // Check HTTP status
+        char status[32] = {0};
+        sslClient.readBytesUntil('\r', status, sizeof(status));
+        Serial.println(status);
+        // It should be "HTTP/1.0 200 OK" or "HTTP/1.1 200 CREATED"
+        if ( strcmp(status + 9, "200 OK") != 0 && strcmp(status + 9, "201 CREATED") != 0 ) 
+        {
+            Serial.print(F("Unexpected response: "));
+            Serial.println(status);
+            return false;
+        }
+
+        // Skip HTTP headers
+        char endOfHeaders[] = "\r\n\r\n";
+        if (!sslClient.find(endOfHeaders)) 
+        {
+            Serial.println(F("Invalid response"));
+            return false;
+        }
+
+        DeserializationError error = deserializeJson(*responseDoc, sslClient);
+        if (error) {
+            Serial.print(F("deserializeJson() failed: "));
+            Serial.println(error.c_str());
+            return false;
+        }
+
+        return true;
+    } else {
+        Serial.println("Backend is not connected. Connect before making a request!");
+    }
+}
+
+void NetworkHelper::disconnectBackend() {
+    // Close connection
+    sslClient.println("Connection: close");
+    sslClient.println();
+
+    // Catch remaining output
+    while(sslClient.available()) {
+        Serial.write(sslClient.read());
+    }
+
+    // Disconnect client
+    if (sslClient.connected()) {
+        sslClient.stop();
+    }
+}
+
 void NetworkHelper::testBackend(const char *logmessage) {
   // connect
   Serial.print("\nStarting connection to server ");
