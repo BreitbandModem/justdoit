@@ -22,9 +22,9 @@ class NetworkHelper {
         BearSSLClient* getClient();
         void testBackend(const char*);
         bool connectBackend();
-        bool getRequest(DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc);
-        bool postRequest(DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc);
-        bool deleteRequest(DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc);
+        bool getRequest(const char* path, DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc);
+        bool postRequest(const char* path, DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc);
+        bool deleteRequest(const char* path, DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc);
         void disconnectBackend();
 
     private:
@@ -36,7 +36,7 @@ class NetworkHelper {
         static unsigned long lastWifiConnectTime;  // the last time we tried to connect to wifi
         static unsigned long wifiConnectDelay;  // wait this long before trying to reconnect to wifi
         
-        bool httpRequest(const char* method, DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc);
+        bool httpRequest(const char* method, const char* path, DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc);
 };
 
 #endif

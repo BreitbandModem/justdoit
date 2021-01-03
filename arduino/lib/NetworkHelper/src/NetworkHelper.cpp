@@ -114,24 +114,26 @@ bool NetworkHelper::connectBackend() {
     return connected;
 }
 
-bool NetworkHelper::getRequest(DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc) {
-    return httpRequest("GET", requestDoc, responseDoc);
+bool NetworkHelper::getRequest(const char* path, DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc) {
+    return httpRequest("GET", path, requestDoc, responseDoc);
 }
 
-bool NetworkHelper::postRequest(DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc) {
-    return httpRequest("POST", requestDoc, responseDoc);
+bool NetworkHelper::postRequest(const char* path, DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc) {
+    return httpRequest("POST", path, requestDoc, responseDoc);
 }
 
-bool NetworkHelper::deleteRequest(DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc) {
-    return httpRequest("DELETE", requestDoc, responseDoc);
+bool NetworkHelper::deleteRequest(const char* path, DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc) {
+    return httpRequest("DELETE", path, requestDoc, responseDoc);
 }
 
-bool NetworkHelper::httpRequest(const char* method, DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc) {
+bool NetworkHelper::httpRequest(const char* method, const char* path, DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc) {
     if(sslClient.connected()) {
         Serial.println("Submitting http request to backend.");
 
         sslClient.print(method);
-        sslClient.println(" /habit/meditation HTTP/1.1");
+        sslClient.print(" ");
+        sslClient.print(path);
+        sslClient.println(" HTTP/1.1");
         sslClient.print("Host: ");
         sslClient.println(backend);
         sslClient.println("Content-type: application/json");

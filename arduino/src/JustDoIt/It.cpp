@@ -49,7 +49,7 @@ bool It::getIt(int index, const char* todayDate, NetworkHelper* networkHelper) {
     requestDoc["startDate"] = todayDate;
     requestDoc["count"] = index;
     
-    if(networkHelper->getRequest(&requestDoc, &responseDoc)) {
+    if(networkHelper->getRequest("/habit/meditation", &requestDoc, &responseDoc)) {
         const char* responseDate = responseDoc["history"][0]["date"];
         setDate(responseDate);
 
@@ -75,7 +75,7 @@ bool It::postIt(NetworkHelper* networkHelper) {
         requestDoc["dates"][0]["date"] = getDate();
 
         if(isDone()) {
-            if(networkHelper->postRequest(&requestDoc, &responseDoc)) {
+            if(networkHelper->postRequest("/habit/meditation", &requestDoc, &responseDoc)) {
                 if(responseDoc["added"] >= 0) {
                     Serial.println("Successfully added date to backend.");
                     setSynced(true);
@@ -83,7 +83,7 @@ bool It::postIt(NetworkHelper* networkHelper) {
                 }
             }
         } else {
-            if(networkHelper->deleteRequest(&requestDoc, &responseDoc)) {
+            if(networkHelper->deleteRequest("/habit/meditation", &requestDoc, &responseDoc)) {
                 if(responseDoc["deleted"] >= 0) {
                     Serial.println("Successfully deleted date from backend.");
                     setSynced(true);
