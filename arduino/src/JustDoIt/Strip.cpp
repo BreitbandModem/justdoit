@@ -54,6 +54,8 @@ void Strip::sync(NetworkHelper* networkHelper) {
     Serial.print("Free memory: ");
     Serial.println(NetworkHelper::freeMemory());
 
+    advanceLoadingAnimation();
+
     if(networkHelper->connectBackend()) {
       for(int i=0; i<pixelCount; i++) {
         if(data[i].postIt(networkHelper)) {
