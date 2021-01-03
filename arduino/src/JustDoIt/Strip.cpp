@@ -44,7 +44,9 @@ void Strip::done(int index, String date, NetworkHelper* networkHelper) {
     strip.show();
 
     if(networkHelper->connectBackend()) {
+      advanceLoadingAnimation();
       data[index].postIt(networkHelper);
+      advanceLoadingAnimation();
       data[index].getStreak(networkHelper);
       networkHelper->disconnectBackend();
     }
@@ -57,14 +59,18 @@ void Strip::sync(NetworkHelper* networkHelper) {
     Serial.print("Free memory: ");
     Serial.println(NetworkHelper::freeMemory());
 
-    advanceLoadingAnimation();
-
     if(networkHelper->connectBackend()) {
       for(int i=0; i<pixelCount; i++) {
+        advanceLoadingAnimation();
         if(data[i].postIt(networkHelper)) {
-          data[i].getIt(i, data[0].getDate(), networkHelper);
+          if (! data[i].getIt(i, data[0].getDate(), networkHelper)) {
+            // assume backend is offline
+            break;
+          }
         }
       }
+
+      advanceLoadingAnimation();
 
       // only current streak is of interest 
       data[0].getStreak(networkHelper);
@@ -97,14 +103,14 @@ void Strip::visualize() {
         if (streak > 0) 
             streak --;
 
-        if ( i == 0 && ! data[i].isDone()) {
-        setPixelTodo(i);
-        } else if (! data[i].isSynced() ) {
-        setPixelPending(i);
+        if (! data[i].isSynced() ) {
+            setPixelPending(i);
+        } else if ( i == 0 && ! data[i].isDone()) {
+            setPixelTodo(i);
         } else if ( data[i].isDone() ){
-        setPixelDone(i, streak);
+            setPixelDone(i, streak);
         } else {
-        setPixelUndone(i);
+            setPixelUndone(i);
         }
     }
     strip.show();
