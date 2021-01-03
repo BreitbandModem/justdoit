@@ -17,7 +17,6 @@ Strip::Strip(int _pixelCount, int pixelPin, int brightness)
 
         data = new It[pixelCount];
         for(int i=0; i<pixelCount; i++) {
-          data[i].setStrip(&strip);
           data[i].setIndex(i); 
         }
 }
@@ -56,8 +55,6 @@ void Strip::newDay(String date) {
     }
 
     // Set todays pixel
-    data[0].setStrip(&strip);
-    data[0].setIndex(0);
     data[0].setDate(date);
     data[0].setDone(false);
     data[0].setSynced(true);

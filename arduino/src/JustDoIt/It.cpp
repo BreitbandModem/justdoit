@@ -11,13 +11,6 @@ It::It()
     date = (char*) malloc( DATE_LENGTH );
 }
 
-void It::setStrip(Adafruit_NeoPixel* _strip) {
-    strip = _strip;
-}
-Adafruit_NeoPixel* It::getStrip() {
-    return strip;
-}
-
 void It::setIndex(int i) {
     index = i;
 }

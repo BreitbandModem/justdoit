@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 #include <NetworkHelper.h>
-#include <Adafruit_NeoPixel.h>
 
 class It {
 public:
@@ -12,9 +11,6 @@ public:
   static const char MYISO8601[];
   static const char* getTodayDate();
   static void setTodayDate(char* date);
-
-  void setStrip(Adafruit_NeoPixel* strip);
-  Adafruit_NeoPixel* getStrip();
 
   void setIndex(int i);
   int getIndex();
@@ -39,7 +35,6 @@ private:
   static const size_t DATE_LENGTH;
   static char* todayDate;
 
-  Adafruit_NeoPixel* strip;
   int index;
   char* date;
   bool done;
