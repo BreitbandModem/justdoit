@@ -150,10 +150,6 @@ bool NetworkHelper::httpRequest(const char* method, const char* path, DynamicJso
         serializeJson(*requestDoc, Serial);
         serializeJson(*requestDoc, sslClient);
 
-        // Catch empty lines
-        while(sslClient.available()) {
-            Serial.write(sslClient.read());
-        }
 
         // Check HTTP status
         char status[32] = {0};
@@ -164,6 +160,12 @@ bool NetworkHelper::httpRequest(const char* method, const char* path, DynamicJso
         {
             Serial.print(F("Unexpected response: "));
             Serial.println(status);
+
+            // Catch trailing result
+            while(sslClient.available()) {
+                Serial.write(sslClient.read());
+            }
+            
             return false;
         }
 
@@ -172,6 +174,12 @@ bool NetworkHelper::httpRequest(const char* method, const char* path, DynamicJso
         if (!sslClient.find(endOfHeaders)) 
         {
             Serial.println(F("Invalid response"));
+
+            // Catch trailing result
+            while(sslClient.available()) {
+                Serial.write(sslClient.read());
+            }
+            
             return false;
         }
 
@@ -179,7 +187,18 @@ bool NetworkHelper::httpRequest(const char* method, const char* path, DynamicJso
         if (error) {
             Serial.print(F("deserializeJson() failed: "));
             Serial.println(error.c_str());
+
+            // Catch trailing result
+            while(sslClient.available()) {
+                Serial.write(sslClient.read());
+            }
+
             return false;
+        }
+
+        // Catch trailing result
+        while(sslClient.available()) {
+            Serial.write(sslClient.read());
         }
 
         return true;
