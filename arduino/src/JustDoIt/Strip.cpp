@@ -38,16 +38,20 @@ void Strip::done(int index, String date, NetworkHelper* networkHelper) {
     data[index].setDate(date);
     data[index].setDone(! data[index].isDone());
     data[index].setSynced(false);
+    if(data[index].isDone() && index < pixelCount - 1) {
+      // continue streak calculation in case backend is offline
+      data[index].setStreak( data[index+1].getStreak() + 1 );
+    }
 
     // sync pending -> green
     setPixelPending(index);
     strip.show();
 
     if(networkHelper->connectBackend()) {
-      advanceLoadingAnimation();
-      data[index].postIt(networkHelper);
-      advanceLoadingAnimation();
-      data[index].getStreak(networkHelper);
+      if(data[index].postIt(networkHelper)) {
+        data[index].getStreak(networkHelper);
+      }
+
       networkHelper->disconnectBackend();
     }
 
@@ -72,8 +76,10 @@ void Strip::sync(NetworkHelper* networkHelper) {
 
       advanceLoadingAnimation();
 
-      // only current streak is of interest 
+      // to calculate the current streak, get the pre-calculated streaks from the backend
+      // for today and yesterday (in case today has not been done yet; to allow for offline calculation of today streak).
       data[0].getStreak(networkHelper);
+      data[1].getStreak(networkHelper);
 
       networkHelper->disconnectBackend();
     }

@@ -30,6 +30,9 @@ bool It::isDone() {
 }
 void It::setDone(bool d) {
     done = d;
+    if (! done) {
+        setStreak(0);
+    }
 }
 
 bool It::isSynced() {
