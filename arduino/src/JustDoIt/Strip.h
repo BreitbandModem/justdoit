@@ -31,7 +31,7 @@ class Strip {
         void setPixelPending(int);
         void setPixelUndone(int);
         void setPixelTodo(int);
-        void setPixelDone(int);
+        void setPixelDone(int, int);
         void setPixelLoading(int);
         bool syncUp(NetworkHelper*);
         bool syncDown(NetworkHelper*);

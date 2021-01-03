@@ -45,8 +45,11 @@ void Strip::done(int index, String date, NetworkHelper* networkHelper) {
 
     if(networkHelper->connectBackend()) {
       data[index].postIt(networkHelper);
+      data[index].getStreak(networkHelper);
       networkHelper->disconnectBackend();
     }
+
+    visualize();
 }
 
 void Strip::sync(NetworkHelper* networkHelper) {
@@ -62,6 +65,9 @@ void Strip::sync(NetworkHelper* networkHelper) {
           data[i].getIt(i, data[0].getDate(), networkHelper);
         }
       }
+
+      // only current streak is of interest 
+      data[0].getStreak(networkHelper);
 
       networkHelper->disconnectBackend();
     }
@@ -85,13 +91,18 @@ void Strip::advanceLoadingAnimation() {
 }
 
 void Strip::visualize() {
+    int streak = data[0].getStreak();
+
     for (int i=0; i<pixelCount; i++) {
+        if (streak > 0) 
+            streak --;
+
         if ( i == 0 && ! data[i].isDone()) {
         setPixelTodo(i);
         } else if (! data[i].isSynced() ) {
         setPixelPending(i);
         } else if ( data[i].isDone() ){
-        setPixelDone(i);
+        setPixelDone(i, streak);
         } else {
         setPixelUndone(i);
         }
@@ -126,19 +137,18 @@ void Strip::setPixelPending(int arrayIndex) {
   }
 }
 
-void Strip::setPixelDone(int arrayIndex) {
+void Strip::setPixelDone(int arrayIndex, int streak) {
   int pixelIndex = translatePixelLocation(arrayIndex);
   
   if(awake) {
-    float green = (float)pixelIndex / pixelCount * 70.0 + 7.0;
-    float blue = (float)pixelIndex / pixelCount * 127.0 + 12.7;
-    
-    if ( pixelIndex == 0 ) {
-      green = 70.0;
-      blue = 127.0;
-    }
+    // start at turquoise -> blue -> red -> green -> ...
+    int hue = 65536 / 2 + streak * 180;
+    int saturation = 200;
+    int brightness = 64;
+    if (streak == 0)
+      brightness = 30;
 
-    strip.setPixelColor(pixelIndex, strip.Color(  0, ceil(green),   ceil(blue)));  // blueish
+    strip.setPixelColor(pixelIndex, strip.gamma32(strip.ColorHSV(hue, saturation, brightness)));
   } else {
     strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
   }
