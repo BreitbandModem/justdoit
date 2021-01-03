@@ -9,11 +9,6 @@ public:
   It();
 
   static const char MYISO8601[];
-  static const char* getTodayDate();
-  static void setTodayDate(char* date);
-
-  void setIndex(int i);
-  int getIndex();
 
   const char* getDate();
   void setDate(char* d);
@@ -27,15 +22,13 @@ public:
 
   void destroy();
 
-  bool getIt(NetworkHelper*);
+  bool getIt(int, const char*, NetworkHelper*);
   bool postIt(NetworkHelper*);
 
 private:
 
   static const size_t DATE_LENGTH;
-  static char* todayDate;
-
-  int index;
+  
   char* date;
   bool done;
   bool synced;

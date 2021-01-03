@@ -16,9 +16,6 @@ Strip::Strip(int _pixelCount, int pixelPin, int brightness)
         strip.show();
 
         data = new It[pixelCount];
-        for(int i=0; i<pixelCount; i++) {
-          data[i].setIndex(i); 
-        }
 }
 
 void Strip::setAwake(bool a) {
@@ -51,7 +48,6 @@ void Strip::newDay(String date) {
     // Shift all pixels to the 'right' (last pixel will be dropped)
     for (int i=pixelCount-1; i>0; i--) {
         data[i] = data[i-1];
-        data[i].setIndex(i);
     }
 
     // Set todays pixel
@@ -165,7 +161,7 @@ void Strip::sync(NetworkHelper* networkHelper) {
     if(networkHelper->connectBackend()) {
       for(int i=0; i<pixelCount; i++) {
         if(data[i].postIt(networkHelper)) {
-          data[i].getIt(networkHelper);
+          data[i].getIt(i, data[0].getDate(), networkHelper);
         }
       }
 
