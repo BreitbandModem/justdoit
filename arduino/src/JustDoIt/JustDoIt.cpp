@@ -141,7 +141,7 @@ time_t nextFiveMinutes() {
 
   // Debug: Change interval to every 10 seconds
   // tm.Second = tm.Second + 10;
-  tm.Minute = tm.Minute + 5;
+  tm.Minute = tm.Minute + 15;
   
   return makeTime(tm);
 }
