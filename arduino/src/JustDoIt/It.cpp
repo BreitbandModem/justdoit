@@ -6,7 +6,8 @@ const size_t It::DATE_LENGTH = sizeof(char) * ( 26 + 1 );
 
 It::It()
  :done{false},
-  synced{true} {
+  synced{true},
+  streak{0} {
     date = (char*) malloc( DATE_LENGTH );
 }
 
@@ -36,6 +37,13 @@ bool It::isSynced() {
 }
 void It::setSynced(bool s) {
     synced = s;
+}
+
+int It::getStreak() {
+    return streak;
+}
+void It::setStreak(int s) {
+    streak = s;
 }
 
 void It::destroy() {
@@ -92,6 +100,19 @@ bool It::postIt(NetworkHelper* networkHelper) {
             }
         }
     } else {
+        return true;
+    }
+
+    return false;
+}
+
+bool It::getStreak(NetworkHelper* networkHelper) {
+    DynamicJsonDocument requestDoc(16);
+    DynamicJsonDocument responseDoc(32);
+
+    requestDoc["startDate"] = getDate();
+    if(networkHelper->getRequest("/habit/meditation/streak", &requestDoc, &responseDoc)) {
+        setStreak(responseDoc["streak"]);
         return true;
     }
 

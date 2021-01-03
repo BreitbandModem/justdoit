@@ -20,10 +20,14 @@ public:
   bool isSynced();
   void setSynced(bool s);
 
+  int getStreak();
+  void setStreak(int);
+
   void destroy();
 
   bool getIt(int, const char*, NetworkHelper*);
   bool postIt(NetworkHelper*);
+  bool getStreak(NetworkHelper*);
 
 private:
 
@@ -32,6 +36,7 @@ private:
   char* date;
   bool done;
   bool synced;
+  int streak;
 };
 
 #endif
