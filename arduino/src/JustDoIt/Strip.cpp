@@ -28,6 +28,7 @@ void Strip::newDay(String date) {
     }
 
     // Set todays pixel
+    data[0] = It();
     data[0].setDate(date);
     data[0].setDone(false);
     data[0].setSynced(true);
