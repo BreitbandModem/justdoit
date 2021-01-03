@@ -9,7 +9,6 @@
 #include <WiFiNINA.h>
 #include <ArduinoBearSSL.h>
 #include <ArduinoECCX08.h>
-
 #include <NetworkHelper.h>
 
 const byte BUTTON_PIN  = 2;
@@ -18,6 +17,7 @@ const int PIXEL_PIN   = 6;
 const byte LED_PIN     = 13;  // Arduino built-in LED
 const int  PIXEL_COUNT = 60;  // Number of NeoPixels
 const int  BRIGHTNESS  = 10;
+const bool WAIT_FOR_SERIAL = false;
 
 // Supply backend address and certificate via secrets file
 NetworkHelper networkHelper(BACKEND_ADDRESS, CERTIFICATE);
@@ -60,6 +60,7 @@ void setup() {
 
   // ezTime
   setDebug(INFO);
+
   Serial.print("Free memory: ");
   Serial.println(NetworkHelper::freeMemory());
 }
@@ -163,7 +164,7 @@ time_t nextDay() {
 
 void initLog() {
   Serial.begin(9600);
-  if(true) {
+  if(WAIT_FOR_SERIAL) {
     while (!Serial) {
       ; // wait for serial port to connect. Needed for native USB port only
     }

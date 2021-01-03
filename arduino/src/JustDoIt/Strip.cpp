@@ -18,12 +18,19 @@ Strip::Strip(int _pixelCount, int pixelPin, int brightness)
         data = new It[pixelCount];
 }
 
-void Strip::setAwake(bool a) {
-    awake = a;
-}
+void Strip::newDay(String date) {
+    // Free memory of it that falls of the table!
+    data[pixelCount - 1].destroy();
 
-void Strip::show() {
-    strip.show();
+    // Shift all pixels to the 'right' (last pixel will be dropped)
+    for (int i=pixelCount-1; i>0; i--) {
+        data[i] = data[i-1];
+    }
+
+    // Set todays pixel
+    data[0].setDate(date);
+    data[0].setDone(false);
+    data[0].setSynced(true);
 }
 
 void Strip::done(int index, String date, NetworkHelper* networkHelper) {
@@ -41,19 +48,37 @@ void Strip::done(int index, String date, NetworkHelper* networkHelper) {
     }
 }
 
-void Strip::newDay(String date) {
-    // Free memory of it that falls of the table!
-    data[pixelCount - 1].destroy();
+void Strip::sync(NetworkHelper* networkHelper) {
+    Serial.println("Sync");
+    Serial.print("Free memory: ");
+    Serial.println(NetworkHelper::freeMemory());
 
-    // Shift all pixels to the 'right' (last pixel will be dropped)
-    for (int i=pixelCount-1; i>0; i--) {
-        data[i] = data[i-1];
+    if(networkHelper->connectBackend()) {
+      for(int i=0; i<pixelCount; i++) {
+        if(data[i].postIt(networkHelper)) {
+          data[i].getIt(i, data[0].getDate(), networkHelper);
+        }
+      }
+
+      networkHelper->disconnectBackend();
     }
 
-    // Set todays pixel
-    data[0].setDate(date);
-    data[0].setDone(false);
-    data[0].setSynced(true);
+    visualize();
+}
+
+void Strip::setAwake(bool a) {
+    awake = a;
+}
+
+void Strip::show() {
+    strip.show();
+}
+
+void Strip::advanceLoadingAnimation() {
+    setPixelLoading(loadingAnimationPixel);
+    setPixelUndone(loadingAnimationPixel - 1);
+    loadingAnimationPixel += 1;
+    strip.show();
 }
 
 void Strip::visualize() {
@@ -144,29 +169,4 @@ void Strip::setPixelLoading(int arrayIndex) {
   } else {
     strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
   }
-}
-
-void Strip::advanceLoadingAnimation() {
-    setPixelLoading(loadingAnimationPixel);
-    setPixelUndone(loadingAnimationPixel - 1);
-    loadingAnimationPixel += 1;
-    strip.show();
-}
-
-void Strip::sync(NetworkHelper* networkHelper) {
-    Serial.println("Sync");
-    Serial.print("Free memory: ");
-    Serial.println(NetworkHelper::freeMemory());
-
-    if(networkHelper->connectBackend()) {
-      for(int i=0; i<pixelCount; i++) {
-        if(data[i].postIt(networkHelper)) {
-          data[i].getIt(i, data[0].getDate(), networkHelper);
-        }
-      }
-
-      networkHelper->disconnectBackend();
-    }
-
-    visualize();
 }

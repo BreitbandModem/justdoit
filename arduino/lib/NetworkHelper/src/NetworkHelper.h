@@ -19,11 +19,6 @@ class NetworkHelper {
         static void checkWifiModule();
         static void checkWifiFirmware();
 
-        WiFiClient client;
-        BearSSLClient sslClient; 
-        const char* backend;
-        const char* certificate;
-
         BearSSLClient* getClient();
         void testBackend(const char*);
         bool connectBackend();
@@ -33,12 +28,14 @@ class NetworkHelper {
         void disconnectBackend();
 
     private:
+        WiFiClient client;
+        BearSSLClient sslClient; 
+        const char* backend;
+        const char* certificate;
+
         static unsigned long lastWifiConnectTime;  // the last time we tried to connect to wifi
         static unsigned long wifiConnectDelay;  // wait this long before trying to reconnect to wifi
         
-        static const char* ssid;
-        static const char* pass;
-
         bool httpRequest(const char* method, DynamicJsonDocument* requestDoc, DynamicJsonDocument* responseDoc);
 };
 
