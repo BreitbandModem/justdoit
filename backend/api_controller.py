@@ -118,6 +118,36 @@ def delete_dates():
 
     return jsonify({'deleted': 0}), 500
 
+@app.route('/habit/meditation/streak', methods=['GET'])
+def get_streak():
+    """Get streak for specific date (consecutive days where habit was done)"""
+    schema = {
+        "type": "object",
+        "properties": {
+            "startDate": {"type": "string"}
+        },
+        "required": ["startDate"]
+
+    }
+
+    app.logger.info('Get request body: %s', request.data)
+
+    req_json = json.loads(request.data)
+    if req_json is not None:
+        try:
+            validate(req_json, schema)
+        except SchemaError as e:
+            app.logger.error('Schema definition invalid.')
+            return jsonify({'streak': -1}), 500
+        except ValidationError as e:
+            app.logger.warning(e)
+            return jsonify({'streak': -1}), 400
+        else:
+            app.logger.info('Retreiving streak information from %s', req_json["startDate"])
+            streak = meditation_habit.get_streak(req_json["startDate"])
+            return jsonify(streak), 200
+
+    return jsonify({'streak': -1}), 500
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)

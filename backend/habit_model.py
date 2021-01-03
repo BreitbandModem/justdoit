@@ -64,6 +64,24 @@ class HabitModel:
 
         return history
 
+    def get_streak(self, start_date):
+        """Get number of consecutive dates found in the data store starting at start_date"""
+        streak = 0
+
+        start_date = datetime.fromisoformat(start_date)
+
+        with open(self.dates_filename, 'r') as dates_file:
+            dates_file_read = dates_file.read()
+
+        # for last ten years...
+        for date in daterange(start_date, 36500):
+            if not date.strftime("%Y-%m-%d") in dates_file_read:
+                return {"streak": streak}
+            else:
+                streak += 1
+        
+        return {"streak": streak}
+
     def add_dates(self, dates):
         """Store list of dates to csv file."""
         add_count = 0

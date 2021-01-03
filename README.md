@@ -40,3 +40,9 @@ curl -X POST -H "Content-Type: application/json" \
     -d '{"dates": [{"date": "25.12.2020T14:23:45+00:00"}] }' \
     http://localhost:5555/habit/meditation
 ```
+
+```bash
+curl -X GET -H "Content-Type: application/json" \
+    -d '{"startDate": "2020-11-15T10:14:43+01:00"}' \
+    http://localhost:5555/habit/meditation/streak
+```
