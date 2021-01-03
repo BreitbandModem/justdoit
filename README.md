@@ -29,6 +29,11 @@ docker run -d \
 
 ## Test Backend
 
+With certificate auth:
+```
+curl --cert /tmp/user.crt --key /tmp/user.key
+```
+
 ```bash
 curl -X GET -H "Content-Type: application/json" \
     -d '{"startDate": "2020-11-15T10:14:43+01:00", "count": 60 }' \
