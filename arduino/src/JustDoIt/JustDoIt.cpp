@@ -16,7 +16,7 @@ const byte PIR_PIN     = 3;
 const int PIXEL_PIN   = 6;
 const byte LED_PIN     = 13;  // Arduino built-in LED
 const int  PIXEL_COUNT = 60;  // Number of NeoPixels
-const int  BRIGHTNESS  = 10;
+const int  BRIGHTNESS  = 255;
 const bool WAIT_FOR_SERIAL = false;
 
 // Supply backend address and certificate via secrets file
