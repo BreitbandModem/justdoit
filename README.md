@@ -1,5 +1,24 @@
 # Habit Tracker
 
+# Arduino
+
+## Setup client certificate authentication
+Add Certificate information to the `arduino/src/Provisioning/arduino_secrets.h` file.
+
+Compile and upload the sketch to the arduino. Connect to the serial and copy the certificate signing request to `arduino/src/Provisioning/arduino.csr`.
+```bash
+cd arduino/src/Provisioning
+make upload
+screen /dev/tty.usbmodem* 9600
+```
+
+Now sign the CSR with the certificate authority (CA) and put the resulting CRT into `arduino/src/JustDoIt/arduino_secrets.h`.
+For my personal ansible playbooks, run the following:
+```bash
+ansible-playbook client_certificate.yaml \
+  --extra-var="cert_dir=../justdoit/arduino/src/Provisioning/ cert_name=arduino"
+```
+
 ## Data Format
 For dates, use ISO8601: `2020-11-09T14:23:45+0000`
 

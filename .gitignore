@@ -3,3 +3,5 @@
 backend/*.csv
 arduino_secrets.h
 arduino/build/*
+*.crt
+*.csr

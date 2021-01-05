@@ -33,6 +33,8 @@
 #include <utility/ECCX08CSR.h>
 #include <utility/ECCX08DefaultTLSConfig.h>
 
+#include "arduino_secrets.h"
+
 /*
 * Function prototypes
 */
@@ -82,14 +84,23 @@ void setup() {
   Serial.println("Hi there, in order to generate a new CSR for your board, we'll need the following information ...");
   Serial.println();
 
-  String country            = promptAndReadLine("Country Name (2 letter code)", "");
-  String stateOrProvince    = promptAndReadLine("State or Province Name (full name)", "");
-  String locality           = promptAndReadLine("Locality Name (eg, city)", "");
-  String organization       = promptAndReadLine("Organization Name (eg, company)", "");
-  String organizationalUnit = promptAndReadLine("Organizational Unit Name (eg, section)", "");
-  String common             = promptAndReadLine("Common Name (e.g. server FQDN or YOUR name)", serialNumber.c_str());
-  String slot               = promptAndReadLine("What slot would you like to use? (0 - 4)", "0");
-  String generateNewKey     = promptAndReadLine("Would you like to generate a new private key? (Y/n)", "Y");
+  // String country            = promptAndReadLine("Country Name (2 letter code)", "");
+  // String stateOrProvince    = promptAndReadLine("State or Province Name (full name)", "");
+  // String locality           = promptAndReadLine("Locality Name (eg, city)", "");
+  // String organization       = promptAndReadLine("Organization Name (eg, company)", "");
+  // String organizationalUnit = promptAndReadLine("Organizational Unit Name (eg, section)", "");
+  // String common             = promptAndReadLine("Common Name (e.g. server FQDN or YOUR name)", serialNumber.c_str());
+  // String slot               = promptAndReadLine("What slot would you like to use? (0 - 4)", "0");
+  // String generateNewKey     = promptAndReadLine("Would you like to generate a new private key? (Y/n)", "Y");
+
+  String country = COUNTRY;
+  String stateOrProvince = STATE;
+  String locality = LOCALITY;
+  String organization = ORGANIZATION;
+  String organizationalUnit = OU;
+  String common = serialNumber;
+  String slot = SLOT;
+  String generateNewKey = NEWKEY;
 
   Serial.println();
 
