@@ -77,7 +77,12 @@ void loop() {
   int readPir = digitalRead(PIR_PIN);
   if (readPir == HIGH) {
     lastPirTime = millis();
-    strip.setAwake(true);
+    
+    // quite hours between 21:00 and 07:00
+    tmElements_t tm;
+    breakTime(UTC.now(), tm);
+    if(tm.Hour < 21 && tm.Hour > 7)
+      strip.setAwake(true);
   }
 
   if ((millis() - lastPirTime) > pirDelay) {
