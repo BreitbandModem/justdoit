@@ -1,0 +1,7 @@
+#define COUNTRY "WL"
+#define STATE "Wonderland"
+#define LOCALITY "Playtown"  
+#define ORGANIZATION "Fun"
+#define OU "arduino-project"
+#define SLOT "0"
+#define NEWKEY "Y"
