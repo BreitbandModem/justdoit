@@ -1,12 +1,10 @@
 #include "Timing.h"
 
+Timezone Timing::tz;
 const char Timing::MYISO8601[] = "Y-m-d~TH:i:sP";
 int Timing::intervalMinutes = 15;
 void (*Timing::intervalCallback)() = NULL;
-
-Timing::Timing() {
-    // setDebug(INFO);
-};
+void (*Timing::nextDayCallback)() = NULL;
 
 String Timing::getDate() {
     return tz.dateTime(MYISO8601);
@@ -23,7 +21,6 @@ bool Timing::isSynced() {
     return (timeStatus() == timeSet);
 };
 
-
 void Timing::onInterval(int minutes, void(*callback)()) {
     intervalMinutes = minutes;
     intervalCallback = callback;
@@ -36,9 +33,35 @@ time_t Timing::nextInterval(int minutes) {
     breakTime(UTC.now(), tm);
     tm.Minute = tm.Minute + minutes;
     return makeTime(tm);
-}
+};
 
 void Timing::onIntervalScheduler() {
     intervalCallback();
     setEvent(&Timing::onIntervalScheduler, nextInterval(intervalMinutes));
-}
+};
+
+void Timing::onNextDay(void(*callback)()) {
+    nextDayCallback = callback;
+    deleteEvent(&Timing::onNextDayScheduler);
+    setEvent(&Timing::onNextDayScheduler, nextDay());
+};
+
+time_t Timing::nextDay() {
+
+    tmElements_t tm;
+    breakTime(tz.now(), tm);
+
+    // Run at 03:00 on the next day
+    tm.Day = tm.Day + 1;
+    tm.Hour = 3;
+    tm.Minute = 0;
+    tm.Second = 0;
+  
+    time_t nextEventUTC = tz.tzTime(makeTime(tm));
+    return nextEventUTC;
+};
+
+void Timing::onNextDayScheduler() {
+    nextDayCallback();
+    setEvent(&Timing::onNextDayScheduler, nextDay());
+};

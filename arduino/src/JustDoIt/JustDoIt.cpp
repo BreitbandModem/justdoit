@@ -27,7 +27,6 @@ NetworkHelper networkHelper(BACKEND_ADDRESS, CERTIFICATE);
 
 // Timing variables
 Timezone myTimezone;
-Timing timeHelper;
 
 // Pixel variables
 Strip strip(PIXEL_COUNT, PIXEL_PIN, BRIGHTNESS);
@@ -48,7 +47,6 @@ void setup(void);
 void loop(void);
 void everyDay();
 void fullSync();
-time_t nextDay();
 void quietHour();
 void initLog();
 void requireLoop();
@@ -117,7 +115,7 @@ void loop() {
           deleteEvent(quietHour);
           setEvent(quietHour, makeTime(tm));
         } else {
-          strip.done(0, timeHelper.getDate(), &networkHelper);
+          strip.done(0, Timing::getDate(), &networkHelper);
         }
       }
     }
@@ -130,11 +128,8 @@ void loop() {
 void everyDay() {
   Serial.println("Next Day. Shifting pixelHistory...");
 
-  strip.newDay(timeHelper.getDate());
+  strip.newDay(Timing::getDate());
   strip.visualize();
-
-  // register next event
-  setEvent( everyDay, nextDay() );
 }
 
 // Triggered every 5 Minutes by the ezTime events()
@@ -171,23 +166,6 @@ void quietHour() {
   setEvent( quietHour, nextEventUTC );
 }
 
-// Calculate timestamp for next day 3:00 am
-time_t nextDay() {
-  Serial.println("Calculating next Day...");
-
-  // TODO: change from UTC to timezone
-  tmElements_t tm;
-  breakTime(UTC.now(), tm);
-
-  // Run at 03:00 on the next day
-  tm.Day = tm.Day + 1;
-  tm.Hour = 3;
-  tm.Minute = 0;
-  tm.Second = 0;
-  
-  return makeTime(tm);
-}
-
 void initLog() {
   Serial.begin(9600);
   if(WAIT_FOR_SERIAL) {
@@ -216,11 +194,11 @@ void requireLoop() {
   }
 
   // wait for eztime sync
-  while(!timeHelper.isSynced()) {
+  while(!Timing::isSynced()) {
       requirementMissing = true;
       strip.advanceLoadingAnimation();
 
-      timeHelper.syncTime();
+      Timing::syncTime();
 
       delay(5000);
   }
@@ -232,16 +210,15 @@ void requireLoop() {
     // networkHelper.testBackend("test backend #1");
 
     // init strip by setting first day and syncing with backend
-    strip.newDay(timeHelper.getDate());
+    strip.newDay(Timing::getDate());
     fullSync();
 
     // delete existing ezTime events
-    deleteEvent( everyDay );
     deleteEvent( quietHour );
     // setup events from scratch
-    setEvent( everyDay, nextDay() );
     quietHour(); // calling the event will schedule the next event
 
-    timeHelper.onInterval(15, fullSync);
+    Timing::onInterval(15, fullSync);
+    Timing::onNextDay(everyDay);
   }
 }
