@@ -8,12 +8,15 @@ class Timing {
     public:
         static bool syncTime();
         static bool isSynced();
+        
+        static void callEvents();
 
         static String getDate();
 
         static void onInterval(int minutes, void(*function)());
         static void onNextDay(void (*function)());
-        // void onQuietHour(int start, int end, void(*function)(bool));
+        static void onQuietHour(int start, int end, void(*function)(bool));
+        static void pauseQuietHour(int minutes);
 
     private:
         static Timezone tz;
@@ -27,6 +30,11 @@ class Timing {
         static void(*nextDayCallback)();
         static time_t nextDay();
         static void onNextDayScheduler();
+
+        static int quietHourStart;
+        static int quietHourEnd;
+        static void(*quietHourCallback)(bool);
+        static void onQuietHourScheduler();
 };
 
 #endif

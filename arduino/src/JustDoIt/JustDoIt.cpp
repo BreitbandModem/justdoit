@@ -6,8 +6,8 @@
 
 #include <Wire.h>
 #include <SPI.h>
-#include <ezTime.h>
 #include <WiFiNINA.h>
+#include <ezTime.h>
 #include <ArduinoBearSSL.h>
 #include <ArduinoECCX08.h>
 #include <NetworkHelper.h>
@@ -18,15 +18,14 @@ const int PIXEL_PIN   = 6;
 const byte LED_PIN     = 13;  // Arduino built-in LED
 const int  PIXEL_COUNT = 60;  // Number of NeoPixels
 const int  BRIGHTNESS  = 255;
-const bool WAIT_FOR_SERIAL = true;
+const bool WAIT_FOR_SERIAL = false;
 const int QUIET_HOUR_START = 21;
 const int QUIET_HOUR_END = 7;
+const int QUIET_HOUR_PAUSE = 1;
+const int SYNC_INTERVAL = 15;
 
 // Supply backend address and certificate via secrets file
 NetworkHelper networkHelper(BACKEND_ADDRESS, CERTIFICATE);
-
-// Timing variables
-Timezone myTimezone;
 
 // Pixel variables
 Strip strip(PIXEL_COUNT, PIXEL_PIN, BRIGHTNESS);
@@ -47,7 +46,7 @@ void setup(void);
 void loop(void);
 void everyDay();
 void fullSync();
-void quietHour();
+void quietHour(bool);
 void initLog();
 void requireLoop();
 
@@ -60,9 +59,6 @@ void setup() {
   NetworkHelper::checkWifiModule();
   NetworkHelper::checkWifiFirmware();
 
-  // ezTime
-  setDebug(INFO);
-
   Serial.print("Free memory: ");
   Serial.println(NetworkHelper::freeMemory());
 }
@@ -74,7 +70,7 @@ void loop() {
   requireLoop();
 
   // ezTime event trigger
-  events();
+  Timing::callEvents();
 
   int readPir = digitalRead(PIR_PIN);
   if (readPir == HIGH) {
@@ -104,16 +100,7 @@ void loop() {
         Serial.println("Button pressed.");
         // get quiet hours...
         if(strip.getQuietHours()) {
-          // set strip active
-          strip.setAwake(true);
-          strip.setQuietHours(false);
-
-          // set event to recalculate quiet hours in 1min
-          tmElements_t tm;
-          breakTime(UTC.now(), tm);
-          tm.Minute = tm.Minute + 1;
-          deleteEvent(quietHour);
-          setEvent(quietHour, makeTime(tm));
+          Timing::pauseQuietHour(QUIET_HOUR_PAUSE);
         } else {
           strip.done(0, Timing::getDate(), &networkHelper);
         }
@@ -142,28 +129,11 @@ void fullSync() {
   strip.sync(&networkHelper);
 }
 
-void quietHour() {
-  Serial.println("Toggle quiet hour");
+void quietHour(bool isQuietHour) {
+    Serial.print("Quiet Hour is active: ");
+    Serial.println(isQuietHour);
 
-  tmElements_t tm;
-  breakTime(myTimezone.now(), tm);
-
-  if (tm.Hour >= QUIET_HOUR_START || tm.Hour < QUIET_HOUR_END) {
-    // We're in quiet hours -> next event at quiet hour end.
-    tm.Day = tm.Day + 1;
-    tm.Hour = QUIET_HOUR_END;
-
-    strip.setQuietHours(true);
-  } else {
-    // We're outside of quiet hours -> next event at quiet hour start.
-    tm.Hour = QUIET_HOUR_START;
-
-    strip.setQuietHours(false);
-  }
-
-  time_t nextEventUTC = myTimezone.tzTime(makeTime(tm));
-
-  setEvent( quietHour, nextEventUTC );
+    strip.setQuietHours(isQuietHour);
 }
 
 void initLog() {
@@ -213,12 +183,9 @@ void requireLoop() {
     strip.newDay(Timing::getDate());
     fullSync();
 
-    // delete existing ezTime events
-    deleteEvent( quietHour );
-    // setup events from scratch
-    quietHour(); // calling the event will schedule the next event
-
-    Timing::onInterval(15, fullSync);
+    // setup timing event callbacks
+    Timing::onInterval(SYNC_INTERVAL, fullSync);
     Timing::onNextDay(everyDay);
+    Timing::onQuietHour(QUIET_HOUR_START, QUIET_HOUR_END, quietHour);
   }
 }
