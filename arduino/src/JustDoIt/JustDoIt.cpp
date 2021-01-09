@@ -2,6 +2,7 @@
 #include "arduino_secrets.h" 
 #include "Strip.h"
 #include "It.h"
+#include "Timing.h"
 
 #include <Wire.h>
 #include <SPI.h>
@@ -17,7 +18,7 @@ const int PIXEL_PIN   = 6;
 const byte LED_PIN     = 13;  // Arduino built-in LED
 const int  PIXEL_COUNT = 60;  // Number of NeoPixels
 const int  BRIGHTNESS  = 255;
-const bool WAIT_FOR_SERIAL = false;
+const bool WAIT_FOR_SERIAL = true;
 const int QUIET_HOUR_START = 21;
 const int QUIET_HOUR_END = 7;
 
@@ -26,6 +27,7 @@ NetworkHelper networkHelper(BACKEND_ADDRESS, CERTIFICATE);
 
 // Timing variables
 Timezone myTimezone;
+Timing timeHelper;
 
 // Pixel variables
 Strip strip(PIXEL_COUNT, PIXEL_PIN, BRIGHTNESS);
@@ -116,7 +118,7 @@ void loop() {
           deleteEvent(quietHour);
           setEvent(quietHour, makeTime(tm));
         } else {
-          strip.done(0, myTimezone.dateTime(It::MYISO8601), &networkHelper);
+          strip.done(0, timeHelper.getDate(), &networkHelper);
         }
       }
     }
@@ -129,7 +131,7 @@ void loop() {
 void everyDay() {
   Serial.println("Next Day. Shifting pixelHistory...");
 
-  strip.newDay(myTimezone.dateTime(It::MYISO8601));
+  strip.newDay(timeHelper.getDate());
   strip.visualize();
 
   // register next event
@@ -233,12 +235,13 @@ void requireLoop() {
   }
 
   // wait for eztime sync
-  while (timeStatus() != timeSet) {
-    requirementMissing = true;
-    strip.advanceLoadingAnimation();
-    waitForSync(10);
-    myTimezone.setLocation(F("de"));
-    delay(5000);
+  while(!timeHelper.isSynced()) {
+      requirementMissing = true;
+      strip.advanceLoadingAnimation();
+
+      timeHelper.syncTime();
+
+      delay(5000);
   }
 
   if (requirementMissing) {
@@ -248,7 +251,7 @@ void requireLoop() {
     // networkHelper.testBackend("test backend #1");
 
     // init sync and events
-    strip.newDay(myTimezone.dateTime(It::MYISO8601));
+    strip.newDay(timeHelper.getDate());
 
     // delete existing ezTime events
     deleteEvent( fullSync );
