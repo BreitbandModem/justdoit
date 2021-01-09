@@ -48,7 +48,6 @@ void setup(void);
 void loop(void);
 void everyDay();
 void fullSync();
-time_t nextFiveMinutes();
 time_t nextDay();
 void quietHour();
 void initLog();
@@ -146,9 +145,6 @@ void fullSync() {
   Serial.println(NetworkHelper::freeMemory());
 
   strip.sync(&networkHelper);
-
-  // register next event
-  setEvent( fullSync, nextFiveMinutes() );
 }
 
 void quietHour() {
@@ -173,21 +169,6 @@ void quietHour() {
   time_t nextEventUTC = myTimezone.tzTime(makeTime(tm));
 
   setEvent( quietHour, nextEventUTC );
-}
-
-// Calculate timestamp five minutes from now
-time_t nextFiveMinutes() {
-  Serial.println("Calculating next 5 Minutes...");
-
-  // TODO: change from UTC to timezone
-  tmElements_t tm;
-  breakTime(UTC.now(), tm);
-
-  // Debug: Change interval to every 10 seconds
-  // tm.Second = tm.Second + 10;
-  tm.Minute = tm.Minute + 15;
-  
-  return makeTime(tm);
 }
 
 // Calculate timestamp for next day 3:00 am
@@ -250,16 +231,17 @@ void requireLoop() {
     Serial.println(NetworkHelper::freeMemory());
     // networkHelper.testBackend("test backend #1");
 
-    // init sync and events
+    // init strip by setting first day and syncing with backend
     strip.newDay(timeHelper.getDate());
+    fullSync();
 
     // delete existing ezTime events
-    deleteEvent( fullSync );
     deleteEvent( everyDay );
     deleteEvent( quietHour );
     // setup events from scratch
     setEvent( everyDay, nextDay() );
-    fullSync(); // calling the event will schedule the next event
     quietHour(); // calling the event will schedule the next event
+
+    timeHelper.onInterval(15, fullSync);
   }
 }
