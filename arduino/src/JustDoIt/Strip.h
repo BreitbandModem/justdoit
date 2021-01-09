@@ -11,6 +11,8 @@ class Strip {
         Strip(int, int, int);
 
         void setAwake(bool);
+        void setQuietHours(bool);
+        bool getQuietHours();
 
         void visualize();
         void show();
@@ -24,6 +26,7 @@ class Strip {
         It* data;
         int pixelCount;
         bool awake;
+        bool quietHours;
         int loadingAnimationPixel;
 
         void initPixels();

@@ -91,6 +91,14 @@ void Strip::setAwake(bool a) {
     awake = a;
 }
 
+void Strip::setQuietHours(bool isQuietHours) {
+    quietHours = isQuietHours;
+}
+
+bool Strip::getQuietHours() {
+    return quietHours;
+}
+
 void Strip::show() {
     strip.show();
 }
@@ -142,8 +150,8 @@ int Strip::translatePixelLocation(int index) {
 void Strip::setPixelPending(int arrayIndex) {
   int pixelIndex = translatePixelLocation(arrayIndex);
 
-  if(awake) {
-    strip.setPixelColor(pixelIndex, strip.Color(  127, 127,   0));  // yellow
+  if(awake && !quietHours) {
+    strip.setPixelColor(pixelIndex, strip.Color(  64, 64,   0));  // yellow
   } else {
     strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
   }
@@ -152,7 +160,7 @@ void Strip::setPixelPending(int arrayIndex) {
 void Strip::setPixelDone(int arrayIndex, int streak) {
   int pixelIndex = translatePixelLocation(arrayIndex);
   
-  if(awake) {
+  if(awake && !quietHours) {
     // start at turquoise -> blue -> red -> green -> ...
     int hue = 65536 / 2 + streak * 180;
     int saturation = 200;
@@ -169,7 +177,7 @@ void Strip::setPixelDone(int arrayIndex, int streak) {
 void Strip::setPixelUndone(int arrayIndex) {
   int pixelIndex = translatePixelLocation(arrayIndex);
   
-  if(awake) {
+  if(awake && !quietHours) {
     strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
   } else {
     strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off
@@ -179,6 +187,7 @@ void Strip::setPixelUndone(int arrayIndex) {
 void Strip::setPixelTodo(int arrayIndex) {
   int pixelIndex = translatePixelLocation(arrayIndex);
   
+  // Don't check for quiet hours -> ALWAYS show TODO pixels!
   if(awake) {
     strip.setPixelColor(pixelIndex, strip.Color(  230, 40,   0));  // redish
   } else {
@@ -189,7 +198,7 @@ void Strip::setPixelTodo(int arrayIndex) {
 void Strip::setPixelLoading(int arrayIndex) {    
   int pixelIndex = translatePixelLocation(arrayIndex);
   
-  if(awake) {
+  if(awake && !quietHours) {
     strip.setPixelColor(pixelIndex, strip.Color(  127, 0,   0));  // red
   } else {
     strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off

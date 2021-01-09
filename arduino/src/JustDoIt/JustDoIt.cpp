@@ -18,6 +18,8 @@ const byte LED_PIN     = 13;  // Arduino built-in LED
 const int  PIXEL_COUNT = 60;  // Number of NeoPixels
 const int  BRIGHTNESS  = 255;
 const bool WAIT_FOR_SERIAL = false;
+const int QUIET_HOUR_START = 21;
+const int QUIET_HOUR_END = 7;
 
 // Supply backend address and certificate via secrets file
 NetworkHelper networkHelper(BACKEND_ADDRESS, CERTIFICATE);
@@ -46,6 +48,7 @@ void everyDay();
 void fullSync();
 time_t nextFiveMinutes();
 time_t nextDay();
+void quietHour();
 void initLog();
 void requireLoop();
 
@@ -77,12 +80,7 @@ void loop() {
   int readPir = digitalRead(PIR_PIN);
   if (readPir == HIGH) {
     lastPirTime = millis();
-    
-    // quite hours between 21:00 and 07:00
-    tmElements_t tm;
-    breakTime(UTC.now(), tm);
-    if(tm.Hour < 21 && tm.Hour > 7)
-      strip.setAwake(true);
+    strip.setAwake(true);
   }
 
   if ((millis() - lastPirTime) > pirDelay) {
@@ -105,7 +103,21 @@ void loop() {
       // Button has been pressed
       if (currentButtonState == LOW) {
         Serial.println("Button pressed.");
-        strip.done(0, myTimezone.dateTime(It::MYISO8601), &networkHelper);
+        // get quiet hours...
+        if(strip.getQuietHours()) {
+          // set strip active
+          strip.setAwake(true);
+          strip.setQuietHours(false);
+
+          // set event to recalculate quiet hours in 1min
+          tmElements_t tm;
+          breakTime(UTC.now(), tm);
+          tm.Minute = tm.Minute + 1;
+          deleteEvent(quietHour);
+          setEvent(quietHour, makeTime(tm));
+        } else {
+          strip.done(0, myTimezone.dateTime(It::MYISO8601), &networkHelper);
+        }
       }
     }
   }
@@ -137,10 +149,35 @@ void fullSync() {
   setEvent( fullSync, nextFiveMinutes() );
 }
 
+void quietHour() {
+  Serial.println("Toggle quiet hour");
+
+  tmElements_t tm;
+  breakTime(myTimezone.now(), tm);
+
+  if (tm.Hour >= QUIET_HOUR_START || tm.Hour < QUIET_HOUR_END) {
+    // We're in quiet hours -> next event at quiet hour end.
+    tm.Day = tm.Day + 1;
+    tm.Hour = QUIET_HOUR_END;
+
+    strip.setQuietHours(true);
+  } else {
+    // We're outside of quiet hours -> next event at quiet hour start.
+    tm.Hour = QUIET_HOUR_START;
+
+    strip.setQuietHours(false);
+  }
+
+  time_t nextEventUTC = myTimezone.tzTime(makeTime(tm));
+
+  setEvent( quietHour, nextEventUTC );
+}
+
 // Calculate timestamp five minutes from now
 time_t nextFiveMinutes() {
   Serial.println("Calculating next 5 Minutes...");
 
+  // TODO: change from UTC to timezone
   tmElements_t tm;
   breakTime(UTC.now(), tm);
 
@@ -153,8 +190,9 @@ time_t nextFiveMinutes() {
 
 // Calculate timestamp for next day 3:00 am
 time_t nextDay() {
-  Serial.print("Calculating next Day...");
+  Serial.println("Calculating next Day...");
 
+  // TODO: change from UTC to timezone
   tmElements_t tm;
   breakTime(UTC.now(), tm);
 
@@ -212,10 +250,13 @@ void requireLoop() {
     // init sync and events
     strip.newDay(myTimezone.dateTime(It::MYISO8601));
 
-    // ezTime events setup
+    // delete existing ezTime events
     deleteEvent( fullSync );
     deleteEvent( everyDay );
+    deleteEvent( quietHour );
+    // setup events from scratch
     setEvent( everyDay, nextDay() );
-    fullSync();
+    fullSync(); // calling the event will schedule the next event
+    quietHour(); // calling the event will schedule the next event
   }
 }
