@@ -110,11 +110,15 @@ void Timing::onQuietHourScheduler() {
         // We're in quiet hours -> next event at quiet hour end.
         tm.Day = tm.Day + 1;
         tm.Hour = quietHourEnd;
+        tm.Minute = 0;
+        tm.Second = 0;
 
         quietHourCallback(true);
     } else {
         // We're outside of quiet hours -> next event at quiet hour start.
         tm.Hour = quietHourStart;
+        tm.Minute = 0;
+        tm.Second = 0;
 
         quietHourCallback(false);
     }
