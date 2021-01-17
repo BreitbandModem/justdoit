@@ -32,6 +32,8 @@ void Strip::newDay(String date) {
     data[0].setDate(date);
     data[0].setDone(false);
     data[0].setSynced(true);
+
+    freshDay = true;
 }
 
 void Strip::done(int index, String date, NetworkHelper* networkHelper) {
@@ -63,6 +65,8 @@ void Strip::sync(NetworkHelper* networkHelper) {
     Serial.print("Free memory: ");
     Serial.println(NetworkHelper::freeMemory());
 
+    advanceLoadingAnimation();
+
     if(networkHelper->connectBackend()) {
       for(int i=0; i<pixelCount; i++) {
         advanceLoadingAnimation();
@@ -92,6 +96,7 @@ void Strip::setAwake(bool a) {
 }
 
 void Strip::setQuietHours(bool isQuietHours) {
+    freshDay = false;
     quietHours = isQuietHours;
 }
 
@@ -188,7 +193,8 @@ void Strip::setPixelTodo(int arrayIndex) {
   int pixelIndex = translatePixelLocation(arrayIndex);
   
   // Don't check for quiet hours -> ALWAYS show TODO pixels!
-  if(awake) {
+  // EXCEPT when a new day has started (middle of the night)
+  if(awake && !freshDay) {
     strip.setPixelColor(pixelIndex, strip.Color(  230, 40,   0));  // redish
   } else {
     strip.setPixelColor(pixelIndex, strip.Color(  0, 0,   0));  // off

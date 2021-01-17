@@ -27,6 +27,7 @@ class Strip {
         int pixelCount;
         bool awake;
         bool quietHours;
+        bool freshDay;  // is true right after new day has started until quiet hour end. 
         int loadingAnimationPixel;
 
         void initPixels();
