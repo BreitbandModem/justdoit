@@ -103,13 +103,19 @@ static void NetworkHelper::printWifiStatus() {
 }
 
 bool NetworkHelper::connectBackend() {
-    Serial.println("Connecting to Backend.");
+    Serial.print("Connecting to Backend: ");
+    Serial.println(backend);
 
     ArduinoBearSSL.onGetTime(&NetworkHelper::getTimeCallback);
     bool connected = sslClient.connect(backend, 443);
 
     Serial.print("Connected: ");
     Serial.println(connected);
+
+    if(!connected) {
+        Serial.print("Failed to connect to backend. Error Code ");
+        Serial.println(sslClient.errorCode());
+    }
 
     return connected;
 }
