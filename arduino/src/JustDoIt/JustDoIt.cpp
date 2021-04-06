@@ -20,7 +20,7 @@ const int  PIXEL_COUNT = 60;  // Number of NeoPixels
 const int  BRIGHTNESS  = 255;
 const bool WAIT_FOR_SERIAL = false;
 const int QUIET_HOUR_START = 21;
-const int QUIET_HOUR_END = 7;
+const int QUIET_HOUR_END = 8;
 const int QUIET_HOUR_PAUSE = 1;
 const int SYNC_INTERVAL = 15;
 
