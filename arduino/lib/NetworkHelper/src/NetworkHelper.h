@@ -3,6 +3,7 @@
 
 #include <WiFiNINA.h>
 #include <ArduinoBearSSL.h>
+#include <BearSSLTrustAnchors.h>
 #include <ArduinoECCX08.h>
 #include <ArduinoJson.h>
 

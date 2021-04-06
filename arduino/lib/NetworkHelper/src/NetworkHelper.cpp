@@ -4,7 +4,7 @@ NetworkHelper::NetworkHelper(const char* _backend, const char* _certificate)
     : backend(_backend),
       certificate(_certificate),
       client(),
-      sslClient(client) {
+      sslClient(client, TAs, TAs_NUM) {
         sslClient.setEccSlot(0, certificate);
 }
 
